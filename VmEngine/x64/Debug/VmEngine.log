@@ -1,0 +1,25 @@
+﻿  stdafx.cpp
+  VmFramework.cpp
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\vmframework.cpp(40): warning C4101: 'result' :참조되지 않은 지역 변수입니다.
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\vmframework.cpp(102): warning C4267: '=': 'size_t'에서 'uint32_t'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\vmframework.cpp(155): warning C4267: '=': 'size_t'에서 'uint32_t'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\vmframework.cpp(525): warning C4267: '=': 'size_t'에서 'uint32_t'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+  Texture.cpp
+  main.cpp
+  FBXModel.cpp
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\fbxmodel.cpp(342): warning C4267: '인수': 'size_t'에서 'int'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\fbxmodel.cpp(421): warning C4244: '=': 'int'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\fbxmodel.cpp(422): warning C4244: '=': 'double'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\fbxmodel.cpp(494): warning C4244: '=': 'fbxsdk::FbxLongLong'에서 'int'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\fbxmodel.cpp(506): warning C4244: '인수': 'fbxsdk::FbxLongLong'에서 'const int'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\fbxmodel.cpp(507): warning C4244: '인수': 'fbxsdk::FbxLongLong'에서 'const int'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\fbxmodel.cpp(508): warning C4244: '인수': 'fbxsdk::FbxLongLong'에서 'const int'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\fbxmodel.cpp(574): warning C4267: 'return': 'size_t'에서 'int'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\fbxmodel.cpp(579): warning C4267: 'return': 'size_t'에서 'int'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\fbxmodel.cpp(584): warning C4267: 'return': 'size_t'에서 'int'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\fbxmodel.cpp(652): warning C4244: '인수': 'double'에서 'const float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+c:\users\ssenilen\desktop\엔진세미나\vk180216_animation\vulkanstudy\vmengine\fbxmodel.cpp(670): warning C4244: '=': 'fbxsdk::FbxDouble'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+  Common.cxx
+  코드를 생성하고 있습니다...
+  VmEngine.vcxproj -> C:\Users\Ssenilen\Desktop\엔진세미나\VK180216_Animation\VulkanStudy\x64\Debug\VmEngine.exe
+  VmEngine.vcxproj -> C:\Users\Ssenilen\Desktop\엔진세미나\VK180216_Animation\VulkanStudy\x64\Debug\VmEngine.pdb (Full PDB)
