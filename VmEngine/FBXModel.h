@@ -1,18 +1,8 @@
 #pragma once
 #include "Common.h"
 
-struct BoneAnimQT;
 typedef float vec2[2];
-//typedef std::map<int, FbxAMatrix> BoneAnimMatrix;
-typedef std::map<int, BoneAnimQT> BoneAnimData;
-
-// Quaternion & Translation
-struct BoneAnimQT
-{
-	FbxVector4 translation;
-	FbxQuaternion quaternion;
-	FbxVector4 rotation; // 임시로 보관한다.
-};
+typedef std::map<int, FbxAMatrix> BoneAnimMatrix;
 
 struct SubMesh
 {
@@ -59,8 +49,7 @@ private:
 	std::map<int, std::vector<VertexBoneData>> m_SkinningMap;
 	std::map<int, FbxMatrix> m_BoneOffsetMap;
 	std::vector<BoneData> m_vBoneData;
-	//std::map<int, BoneAnimMatrix> m_AnimData;
-	std::map<int, BoneAnimData> m_AnimData;
+	std::map<int, BoneAnimMatrix> m_AnimData;
 
 	FbxArray<SubMesh*> mSubMeshes;
 
@@ -72,7 +61,6 @@ private:
 
 	int m_nNowFrame;
 	int m_nMaxFrame;
-	FbxTime::EMode m_FbxTime;
 
 public:
 	explicit FBXModel(const std::string& sFileName);
@@ -89,11 +77,12 @@ public:
 	int GetVertexDataSize();
 	int GetIndices();
 	int GetIndicesSize();
+
+	void GetPositionData();
+	void GetUVData();
 	void GetVBDataAndMemcpy(uint8_t* pData);
 	void GetIndexDataAndMemcpy(uint16_t* pData);
 	void GetBoneUniformData(uint8_t* pData);
 
 	void AdvanceFrame();
-
-	void FrameInterpolation(int nConvertFrame);
 };

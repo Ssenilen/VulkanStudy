@@ -725,14 +725,13 @@ void VmFramework::InitUniformBuffer()
 	//memcpy(mvp, mtxMVP, sizeof(mtxMVP));
 
 	glm::mat4 mtxProjection = glm::perspective(fov, static_cast<float>(m_nWindowWidth) / static_cast<float>(m_nWindowHeight), 0.1f, 100.0f);
-	glm::mat4 mtxView = glm::lookAt(glm::vec3(0.0f, 180.0f, 250.0f),
-									glm::vec3(0.0f, 0.0f, -400.0f),
+	//glm::mat4 mtxView = glm::lookAt(glm::vec3(0.0f, 180.0f, 250.0f),
+	//								glm::vec3(0.0f, 0.0f, -400.0f),
+	//								glm::vec3(0.0f, 1.0f, 0.0f));
+
+	glm::mat4 mtxView = glm::lookAt(glm::vec3(25.0f,00,0.0f),
+									glm::vec3(0.0f, 0.0f, 0.0f),
 									glm::vec3(0.0f, 1.0f, 0.0f));
-
-	m_fCameraPosX = -60.0f;
-	m_fCameraPosY = 140.0f;
-	m_fCameraPosZ = 225.0f;
-
 
 	//mtxProjection[1][1] *= -1;
 
@@ -1504,7 +1503,7 @@ void VmFramework::UpdateDataBuffer()
 	/// ---임시임시임시임시--- 나중에 카메라기능 따로 뺍시다 ---임시임시임시임시---
 	/// ---임시임시임시임시--- 나중에 카메라기능 따로 뺍시다 ---임시임시임시임시---
 	glm::mat4 mtxView = glm::lookAt(glm::vec3(m_fCameraPosX, m_fCameraPosY, m_fCameraPosZ),
-		glm::vec3(0.0f, 0.0f, -400.0f),
+		glm::vec3(0.0f, 0.0f, 0.0f),
 		glm::vec3(0.0f, 1.0f, 0.0f));
 
 	float fov = glm::radians(45.0f);
@@ -1676,7 +1675,7 @@ void VmFramework::Render()
 
 	UpdateDataBuffer();
 
-	Sleep(16);
+	Sleep(1);
 }
 
 char* VmFramework::read_spv(const char* filename, size_t* pSize)

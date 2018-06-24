@@ -35,7 +35,6 @@ FBXModel::FBXModel(const std::string& sFileName) :
 	GetSkinningVertexData(lScene->GetRootNode());
 
 	BindingVertexAndBoneData(lScene->GetRootNode());
-	FrameInterpolation(60);
 	//GetPoseMatrix(lScene);
 
 
@@ -367,7 +366,7 @@ void FBXModel::GetSkinningVertexData(FbxNode *pNode)
 
 				iter = std::find(m_vBoneData.begin(), m_vBoneData.end(), pCluster->GetLink()->GetName());
 
-				// boneName이 반드시 매칭되어야 한다.
+				// boneName이 매칭되지 않는 것을 오류 상황으로 간주한다.
 				assert(iter != m_vBoneData.end());
 
 				for (int k = 0; k < nIndexCount; ++k)
@@ -404,7 +403,19 @@ void FBXModel::BindingVertexAndBoneData(FbxNode* pNode)
 			{
 				std::sort(m_SkinningMap[i].begin(), m_SkinningMap[i].end(), [](const VertexBoneData& first, const VertexBoneData& second) {
 					return first.weight > second.weight;
-				});				
+				});
+
+				float sumWeight = 0.0f, interpolateWeight = 0.0f;
+				for (int j = 0; j < 4; ++j)
+				{
+					sumWeight += m_SkinningMap[i].at(j).weight;
+				}
+				interpolateWeight = 1.0f - sumWeight;
+
+				auto removeIter = m_SkinningMap[i].begin() + 4;
+				m_SkinningMap[i].erase(removeIter, m_SkinningMap[i].end());
+
+				m_SkinningMap[i].at(0).weight += interpolateWeight;				
 			}
 		}
 
@@ -412,7 +423,7 @@ void FBXModel::BindingVertexAndBoneData(FbxNode* pNode)
 		{
 			for (int i = 0; i < nControlPointCounts; ++i)
 			{
-				// Position을 기준으로 비교
+				// Position을 비교하도록 overriding
 				if (vertexData == pVertices[i])
 				{
 					int nBoneIndicesIndex = 0; /// boneIndices의 index... ㅡㅡ
@@ -473,7 +484,9 @@ void FBXModel::GetBoneOffsetData(FbxScene* pScene, FbxNode* pNode)
 			FbxAMatrix transformLinkMatrix;
 			FbxAMatrix globalBindPoseInverseMatrix;
 
+			// 바인딩 시 mesh의 transformation
 			pCluster->GetTransformMatrix(transformMatrix);
+			// 클러스터가 local space에서 worldspace로 변환
 			pCluster->GetTransformLinkMatrix(transformLinkMatrix);
 			globalBindPoseInverseMatrix = transformLinkMatrix.Inverse() * transformMatrix * geometryTransform;
 
@@ -490,25 +503,18 @@ void FBXModel::GetBoneOffsetData(FbxScene* pScene, FbxNode* pNode)
 			FbxTime end = pTakeInfo->mLocalTimeSpan.GetStop();
 			
 			// 음. 일단 공통된 Animation Length를 가지고 있다고 합시다.
-			m_FbxTime = FbxTime::eFrames30;
-			m_nMaxFrame = end.GetFrameCount(m_FbxTime) - start.GetFrameCount(m_FbxTime);
-			//BoneAnimMatrix currentTransformOffsetMap;
-			BoneAnimData currentOffsetData;
-			for (FbxLongLong i = start.GetFrameCount(m_FbxTime); i <= end.GetFrameCount(m_FbxTime); ++i)
+			m_nMaxFrame = end.GetFrameCount(FbxTime::eFrames30) - start.GetFrameCount(FbxTime::eFrames30);
+
+			BoneAnimMatrix currentTransformOffsetMap;
+			for (FbxLongLong i = start.GetFrameCount(FbxTime::eFrames30); i <= end.GetFrameCount(FbxTime::eFrames30); ++i)
 			{
 				FbxTime currTime;
-				currTime.SetFrame(i, m_FbxTime);
+				currTime.SetFrame(i, FbxTime::eFrames30);
 
 				FbxAMatrix currentTransformOffset = pNode->EvaluateGlobalTransform(currTime) * geometryTransform;
-				//currentTransformOffsetMap[i] = currentTransformOffset.Inverse() * pCluster->GetLink()->EvaluateGlobalTransform(currTime);
-				FbxAMatrix currentTransformOffsetInverse = currentTransformOffset.Inverse() * pCluster->GetLink()->EvaluateGlobalTransform(currTime);
-				
-				currentOffsetData[i].translation = currentTransformOffsetInverse.GetT();
-				currentOffsetData[i].quaternion = currentTransformOffsetInverse.GetQ();
-				currentOffsetData[i].rotation = currentTransformOffsetInverse.GetR();
+				currentTransformOffsetMap[i] = currentTransformOffset.Inverse() * pCluster->GetLink()->EvaluateGlobalTransform(currTime);
 			}
-			//m_AnimData[findIter->nowIndex] = currentTransformOffsetMap;
-			m_AnimData[findIter->nowIndex] = currentOffsetData;
+			m_AnimData[findIter->nowIndex] = currentTransformOffsetMap;
 		}
 	}
 }
@@ -584,6 +590,14 @@ int FBXModel::GetIndicesSize()
 	return m_vIndex.size() * sizeof(uint16_t);
 }
 
+void FBXModel::GetPositionData()
+{
+}
+
+void FBXModel::GetUVData()
+{
+}
+
 void FBXModel::GetVBDataAndMemcpy(uint8_t* pData)
 {
 	if (m_vVertexData.empty())
@@ -636,32 +650,19 @@ void FBXModel::GetBoneUniformData(uint8_t* pData)
 	
 	for (int i = 0; i < m_BoneOffsetMap.size(); ++i)
 	{
-		//BoneAnimMatrix& AnimData = m_AnimData[i];
-		//FbxVector4 translation = AnimData[m_nNowFrame].GetT();
-		//FbxVector4 scale = AnimData[m_nNowFrame].GetS();
-		//FbxVector4 rotation = AnimData[m_nNowFrame].GetR();
-		//FbxQuaternion quaternion = AnimData[m_nNowFrame].GetQ();
-
-		BoneAnimData& AnimData = m_AnimData[i];
-		FbxVector4 translation = AnimData[m_nNowFrame].translation;
-		FbxVector4 scale = FbxVector4(1.0f, 1.0f, 1.0f, 1.0f);
-		FbxVector4 rotation = AnimData[m_nNowFrame].rotation;
-		FbxQuaternion quaternion = AnimData[m_nNowFrame].quaternion;
-
+		BoneAnimMatrix& AnimData = m_AnimData[i];
+		FbxVector4 translation = AnimData[m_nNowFrame].GetT();
+		FbxVector4 scale = AnimData[m_nNowFrame].GetS();
+		FbxVector4 rotation = AnimData[m_nNowFrame].GetR();
+		FbxQuaternion quaternion = AnimData[m_nNowFrame].GetQ();
 		glm::vec3 tran(translation[0], translation[1], translation[2]);
 		glm::quat quat(quaternion[3], quaternion[0], quaternion[1], quaternion[2]);
+		//		
 		glm::mat4 mtxRotation = glm::toMat4(quat);
-
 		glm::mat4 mtxTranslation = glm::translate(glm::mat4(), tran);
 		glm::mat4 mtxScale = glm::mat4();
-		//std::cout << "[Bone00" << i + 1 << "]" << std::endl;
-		//std::cout << currentPose[0][0] << "\t" << currentPose[0][1] << "\t" << currentPose[0][2] << "\t" << currentPose[0][3] << std::endl;
-		//std::cout << currentPose[1][0] << "\t" << currentPose[1][1] << "\t" << currentPose[1][2] << "\t" << currentPose[1][3] << std::endl;
-		//std::cout << currentPose[2][0] << "\t" << currentPose[2][1] << "\t" << currentPose[1][2] << "\t" << currentPose[2][3] << std::endl;
-		//std::cout << currentPose[3][0] << "\t" << currentPose[3][1] << "\t" << currentPose[3][2] << "\t" << currentPose[3][3] << std::endl;
-
+		
 		glm::mat4 currentBoneOffset;
-		glm::mat4 transformMatrix;
 
 		for (int j = 0; j < 4; j++)
 		{
@@ -672,7 +673,7 @@ void FBXModel::GetBoneUniformData(uint8_t* pData)
 		}
 
 		// opengl & vulkan은 T * R * S | DX는 S * R * T 순으로 곱한다.
-		//glm::mat4 _transformMatrix = mtxTranslation * mtxRotation * mtxScale;
+		glm::mat4 transformMatrix = mtxTranslation * mtxRotation * mtxScale;
 		glm::mat4 finalMatrix = transformMatrix * currentBoneOffset;
 
 		vData.push_back(finalMatrix[0][0]);
@@ -704,56 +705,6 @@ void FBXModel::AdvanceFrame()
 {
 	if (++m_nNowFrame > m_nMaxFrame)
 		m_nNowFrame = 0;	
-}
-
-void FBXModel::FrameInterpolation(int nConvertFrame)
-{
-	int nNowFbxTime = 0;
-	switch (m_FbxTime)
-	{
-	case fbxsdk::FbxTime::eFrames120:	nNowFbxTime = 120; break;
-	case fbxsdk::FbxTime::eFrames60:	nNowFbxTime = 60;	break;
-	case fbxsdk::FbxTime::eFrames30:	nNowFbxTime = 30;  break;
-	case fbxsdk::FbxTime::eFrames24:	nNowFbxTime = 24;	break;
-	default: /// 지원하지 않는 프레임
-		assert(0); break;
-	}
-
-	// TODO: 다른 배율에 대해서도 계산하자.
-	int nNewFrameSize = nConvertFrame / nNowFbxTime;
-
-	std::map<int, BoneAnimData> newBoneAnimDataMap;
-
-	for (auto iter = m_AnimData.begin(); iter != m_AnimData.end(); ++iter)
-	{
-		int i = iter->first;
-		BoneAnimData newBoneAnimData;
-		for (int j = 0; j < m_AnimData[i].size(); ++j)
-		{
-			newBoneAnimData[j * nNewFrameSize].quaternion = m_AnimData[i][j].quaternion;
-			newBoneAnimData[j * nNewFrameSize].rotation = m_AnimData[i][j].rotation;
-			newBoneAnimData[j * nNewFrameSize].translation = m_AnimData[i][j].translation;
-
-			if (j != 0)
-			{
-				for (int k = 1; k < nNewFrameSize; ++k)
-				{
-					newBoneAnimData[(j - 1) * nNewFrameSize + k].quaternion =
-						newBoneAnimData[(j - 1) * nNewFrameSize].quaternion.Slerp( 
-							newBoneAnimData[j  * nNewFrameSize].quaternion, (float)k / (float)nNewFrameSize);
-					
-					newBoneAnimData[(j - 1) * nNewFrameSize + k].translation =
-						newBoneAnimData[(j - 1) * nNewFrameSize].translation +
-							(newBoneAnimData[j * nNewFrameSize].translation - newBoneAnimData[(j - 1) * nNewFrameSize].translation) * (float)k / (float)nNewFrameSize;
-				}
-			}
-		}
-		newBoneAnimDataMap[i] = newBoneAnimData;
-	}
-
-	m_AnimData = newBoneAnimDataMap;
-
-	m_nMaxFrame *= nNewFrameSize;	
 }
 
 bool VertexData::operator==(const VertexData& other) const
