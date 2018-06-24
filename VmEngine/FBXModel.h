@@ -2,7 +2,14 @@
 #include "Common.h"
 
 typedef float vec2[2];
-typedef std::map<int, FbxAMatrix> BoneAnimMatrix;
+struct BoneAnimQTData;
+typedef std::map<int, BoneAnimQTData> BoneAnimData;
+
+struct BoneAnimQTData
+{
+	glm::vec3 translation;
+	glm::quat quaternion;
+};
 
 struct SubMesh
 {
@@ -49,7 +56,7 @@ private:
 	std::map<int, std::vector<VertexBoneData>> m_SkinningMap;
 	std::map<int, FbxMatrix> m_BoneOffsetMap;
 	std::vector<BoneData> m_vBoneData;
-	std::map<int, BoneAnimMatrix> m_AnimData;
+	std::map<int, BoneAnimData> m_AnimData;
 
 	FbxArray<SubMesh*> mSubMeshes;
 

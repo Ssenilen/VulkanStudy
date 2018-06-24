@@ -36,36 +36,6 @@ FBXModel::FBXModel(const std::string& sFileName) :
 
 	BindingVertexAndBoneData(lScene->GetRootNode());
 	//GetPoseMatrix(lScene);
-
-
-	//std::cout << "[Vertex]" << std::endl;
-	//for (int i = 0; i < m_vVertexData.size(); ++i)
-	//{
-	//	std::cout << "　v"<<i+1<<" { " << m_vVertexData.at(i).position.x << ", " << m_vVertexData.at(i).position.y << ", " << m_vVertexData.at(i).position.z << std::endl;
-	//	std::cout << "　i"<<i+1<<" { " << m_vVertexData.at(i).boneIndice.x << ", " << m_vVertexData.at(i).boneIndice.y << ", " << m_vVertexData.at(i).boneIndice.z << std::endl;
-	//	std::cout << "　w"<<i+1<<" { " << m_vVertexData.at(i).boneWeights.x << ", " << m_vVertexData.at(i).boneWeights.y << ", " << m_vVertexData.at(i).boneWeights.z << std::endl;
-	//	std::cout << std::endl;
-	//}
-
-	//std::cout << "\n\n[INDEX]" << std::endl;
-	//for (int i = 0; i < m_vIndex.size(); i+=3)
-	//{
-	//	std::cout << m_vIndex.at(i) << " " << m_vIndex.at(i + 1) << " " << m_vIndex.at(i + 2) << std::endl;
-	//}
-
-	//std::cout << "\n\n[Quaternion]" << std::endl;
-	//for (int j = 0; j < 3; j++)
-	//{
-	//	std::cout << "　Bone 1:" << std::endl;
-	//	for (int i = 0; i < 41; i++)
-	//	{
-	//		std::cout << "　　"
-	//			<< m_AnimData[j][i].GetQ()[0] << " "
-	//			<< m_AnimData[j][i].GetQ()[1] << " "
-	//			<< m_AnimData[j][i].GetQ()[2] << " "
-	//			<< m_AnimData[j][i].GetQ()[3] << std::endl;
-	//	}
-	//}
 }
 
 FBXModel::~FBXModel()
@@ -505,14 +475,17 @@ void FBXModel::GetBoneOffsetData(FbxScene* pScene, FbxNode* pNode)
 			// 음. 일단 공통된 Animation Length를 가지고 있다고 합시다.
 			m_nMaxFrame = end.GetFrameCount(FbxTime::eFrames30) - start.GetFrameCount(FbxTime::eFrames30);
 
-			BoneAnimMatrix currentTransformOffsetMap;
+			BoneAnimData currentTransformOffsetMap;
 			for (FbxLongLong i = start.GetFrameCount(FbxTime::eFrames30); i <= end.GetFrameCount(FbxTime::eFrames30); ++i)
 			{
 				FbxTime currTime;
 				currTime.SetFrame(i, FbxTime::eFrames30);
 
 				FbxAMatrix currentTransformOffset = pNode->EvaluateGlobalTransform(currTime) * geometryTransform;
-				currentTransformOffsetMap[i] = currentTransformOffset.Inverse() * pCluster->GetLink()->EvaluateGlobalTransform(currTime);
+				FbxQuaternion quaternion = (currentTransformOffset.Inverse() * pCluster->GetLink()->EvaluateGlobalTransform(currTime)).GetQ();
+				FbxVector4 translation = (currentTransformOffset.Inverse() * pCluster->GetLink()->EvaluateGlobalTransform(currTime)).GetT();
+				currentTransformOffsetMap[i].quaternion = glm::quat(quaternion[3], quaternion[0], quaternion[1], quaternion[2]);
+				currentTransformOffsetMap[i].translation = glm::vec3(translation[0], translation[1], translation[2]);
 			}
 			m_AnimData[findIter->nowIndex] = currentTransformOffsetMap;
 		}
@@ -650,14 +623,15 @@ void FBXModel::GetBoneUniformData(uint8_t* pData)
 	
 	for (int i = 0; i < m_BoneOffsetMap.size(); ++i)
 	{
-		BoneAnimMatrix& AnimData = m_AnimData[i];
-		FbxVector4 translation = AnimData[m_nNowFrame].GetT();
-		FbxVector4 scale = AnimData[m_nNowFrame].GetS();
-		FbxVector4 rotation = AnimData[m_nNowFrame].GetR();
-		FbxQuaternion quaternion = AnimData[m_nNowFrame].GetQ();
-		glm::vec3 tran(translation[0], translation[1], translation[2]);
-		glm::quat quat(quaternion[3], quaternion[0], quaternion[1], quaternion[2]);
+		BoneAnimData& AnimData = m_AnimData[i];
+		//FbxVector4 translation = AnimData[m_nNowFrame].GetT();
+		//FbxQuaternion quaternion = AnimData[m_nNowFrame].GetQ();
+		//glm::vec3 tran(translation[0], translation[1], translation[2]);
+		//glm::quat quat(quaternion[3], quaternion[0], quaternion[1], quaternion[2]);
 		//		
+		glm::vec3 tran(AnimData[m_nNowFrame].translation);
+		glm::quat quat(AnimData[m_nNowFrame].quaternion);
+
 		glm::mat4 mtxRotation = glm::toMat4(quat);
 		glm::mat4 mtxTranslation = glm::translate(glm::mat4(), tran);
 		glm::mat4 mtxScale = glm::mat4();
