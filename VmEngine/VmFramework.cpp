@@ -17,16 +17,15 @@ VmFramework::VmFramework()
 	m_vkCommandBuffer(0),
 	m_vkCommandPool(0),
 	m_nSwapchainImageCount(0),
-	m_nQueueFamilyPropertyCount(0),
+	m_nQueueFamilyCount(0),
 	m_nGraphicQueueFamilyIndex(0),
-	m_nGraphicQueueFamilyCount(0),
 	m_nPresentQueueFamilyIndex(0),
 	m_nWindowWidth(0),
 	m_nWindowHeight(0),
 	m_fRotateAngle(0.00f),
 	m_fCameraPosX(0.0f),
-	m_fCameraPosY(0.0f),
-	m_fCameraPosZ(0.0f)
+	m_fCameraPosY(50.0f),
+	m_fCameraPosZ(375.0f)
 {
 }
 
@@ -45,13 +44,9 @@ void VmFramework::VmInitialize(HINSTANCE hInstance, HWND hWnd, const int nWindow
 	m_nWindowWidth = nWindowWidth;
 	m_nWindowHeight = nWindowHeight;
 
-
-	InitLayerProperties();
-	InitExtensionNames();
-	InitApplication();
-	InitEnumerateDevice();
-	CreateSurface();
-	InitDevice();
+	InitVulkan();
+	InitVKSwapChain();
+	///
 	InitCommandPool();
 	InitCommandBuffer();
 	InitDeviceQueue();
@@ -59,8 +54,10 @@ void VmFramework::VmInitialize(HINSTANCE hInstance, HWND hWnd, const int nWindow
 	CreateDepthBuffer();
 	InitUniformBuffer();
 
-	m_pFbxModel = new FBXModel("gangnamstyle.fbx");
+	m_pFbxModel = new FBXModel("cg_dance2.fbx");
 	InitBoneUniformBuffer();
+
+	m_pFbxModel->GetPositionData();
 
 	InitDescriptorSetAndPipelineLayout(true);
 	InitRenderPass(depthPresent);
@@ -78,18 +75,17 @@ void VmFramework::VmInitialize(HINSTANCE hInstance, HWND hWnd, const int nWindow
 	InitDescriptorSet(true);
 	InitPipelineCache();
 	InitPipeline(depthPresent);
-	CreateSemaphoreAndFence();
 }
 
-void VmFramework::InitApplication()
+void VmFramework::InitVKInstance()
 {
 	VkApplicationInfo app_info = {};
 	app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 	app_info.pNext = nullptr;
 	app_info.pApplicationName = "GS_VULKAN_STUDY";
-	app_info.applicationVersion = 1;
+	app_info.applicationVersion = 0;
 	app_info.pEngineName = "GS_VULKAN_STUDY";
-	app_info.engineVersion = 1;
+	app_info.engineVersion = 0;
 	app_info.apiVersion = VK_API_VERSION_1_0;
 
 	VkInstanceCreateInfo inst_info = {};
@@ -99,67 +95,247 @@ void VmFramework::InitApplication()
 	inst_info.pApplicationInfo = &app_info;
 	inst_info.enabledLayerCount = 0;
 	inst_info.ppEnabledLayerNames = nullptr;
-	inst_info.enabledExtensionCount = m_vvkInstanceExtensionNames.size();
+	inst_info.enabledExtensionCount = m_vvkExtensionNames.size();
 	inst_info.ppEnabledExtensionNames =
-		inst_info.enabledExtensionCount ? m_vvkInstanceExtensionNames.data() : nullptr;
+		inst_info.enabledExtensionCount ? m_vvkExtensionNames.data() : nullptr;
 
 	VkResult result = vkCreateInstance(&inst_info, NULL, &m_vkInstance);
 	assert(result == VK_SUCCESS);
 }
 
-VkResult VmFramework::InitEnumerateDevice(uint32_t physicalDeviceCount)
+VkResult VmFramework::InitEnumerateDevice()
 {
-	const uint32_t req_count = physicalDeviceCount;
-	VkResult result = vkEnumeratePhysicalDevices(m_vkInstance, &physicalDeviceCount, nullptr);
-	assert(physicalDeviceCount);
+	uint32_t gpu_count = 0;
+	VkResult result = vkEnumeratePhysicalDevices(m_vkInstance, &gpu_count, nullptr);
+	assert(result == VK_SUCCESS);
 
-	m_vvkPhysicalDevices.resize(physicalDeviceCount);
+//	m_vvkPhysicalDevices.resize(physicalDeviceCount);
 
-	result = vkEnumeratePhysicalDevices(m_vkInstance, &physicalDeviceCount, m_vvkPhysicalDevices.data());
-	assert(!result && physicalDeviceCount >= req_count);
+	if (gpu_count > 0)
+	{
+		std::unique_ptr<VkPhysicalDevice[]> physical_devices(new VkPhysicalDevice[gpu_count]);
+		result = vkEnumeratePhysicalDevices(m_vkInstance, &gpu_count, physical_devices.get());
+		assert(result == VK_SUCCESS);
+		m_vkPhysicalDevice = physical_devices[0];
+	}
+	else
+	{
+		ERR_EXIT(
+			"vkEnumeratePhysicalDevices reported zero accessible devices.\n\n"
+			"Do you have a compatible Vulkan installable client driver (ICD) installed?\n"
+			"Please look at the Getting Started guide for additional information.\n",
+			"vkEnumeratePhysicalDevices Failure");
+	}
 
-	vkGetPhysicalDeviceQueueFamilyProperties(m_vvkPhysicalDevices[0], &m_nQueueFamilyPropertyCount, nullptr);
-	assert(m_nQueueFamilyPropertyCount >= 1);
+	/* Look for device extensions */
+	uint32_t device_extension_count = 0;
+	VkBool32 swapchainExtFound = VK_FALSE;
+	m_vvkExtensionNames.clear();
 
-	m_vvkQueueFamilyProperties.resize(m_nQueueFamilyPropertyCount);
-	vkGetPhysicalDeviceQueueFamilyProperties(m_vvkPhysicalDevices[0], &m_nQueueFamilyPropertyCount, m_vvkQueueFamilyProperties.data());
-	assert(m_nQueueFamilyPropertyCount >= 1);
+	result = vkEnumerateDeviceExtensionProperties(m_vkPhysicalDevice, nullptr, &device_extension_count, nullptr);
+	assert(result == VK_SUCCESS);
 
-	vkGetPhysicalDeviceMemoryProperties(m_vvkPhysicalDevices[0], &m_vkPhysicalDeviceMemoryProperites);
-	vkGetPhysicalDeviceProperties(m_vvkPhysicalDevices[0], &m_vkPhysicalDeviceProperties);
+	if (device_extension_count > 0)
+	{
+		std::unique_ptr<VkExtensionProperties[]> device_extensions(new VkExtensionProperties[device_extension_count]);
+		result = vkEnumerateDeviceExtensionProperties(m_vkPhysicalDevice, nullptr, &device_extension_count, device_extensions.get());
+		assert(result == VK_SUCCESS);
+
+		for (uint32_t i = 0; i < device_extension_count; ++i)
+		{
+			if (!strcmp(VK_KHR_SWAPCHAIN_EXTENSION_NAME, device_extensions[i].extensionName)) {
+				swapchainExtFound = 1;
+				m_vvkExtensionNames.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+			}
+			assert(m_vvkExtensionNames.size() < 64);
+		}
+	}  
+	if (!swapchainExtFound) {
+		ERR_EXIT("vkEnumerateDeviceExtensionProperties failed to find the " VK_KHR_SWAPCHAIN_EXTENSION_NAME
+			" extension.\n\n"
+			"Do you have a compatible Vulkan installable client driver (ICD) installed?\n"
+			"Please look at the Getting Started guide for additional information.\n",
+			"vkCreateInstance Failure");
+	}
+	vkGetPhysicalDeviceProperties(m_vkPhysicalDevice, &m_vkPhysicalDeviceProperties);
+	vkGetPhysicalDeviceQueueFamilyProperties(m_vkPhysicalDevice, &m_nQueueFamilyCount, nullptr);
+	assert(m_nQueueFamilyCount >= 1);
+
+	m_pvkQueueFamilyProperties.reset(new VkQueueFamilyProperties[m_nQueueFamilyCount]);
+	vkGetPhysicalDeviceQueueFamilyProperties(m_vkPhysicalDevice, &m_nQueueFamilyCount, m_pvkQueueFamilyProperties.get());
+
+	// Query fine-grained feature support for this device.
+	//  If app has specific feature requirements it should check supported
+	//  features based on this query
+	VkPhysicalDeviceFeatures physDevFeatures;
+	vkGetPhysicalDeviceFeatures(m_vkPhysicalDevice, &physDevFeatures);
 
 	return result;
+}
+
+void VmFramework::InitVKSwapChain()
+{
+	VkResult result;
+
+	// Surface 생성
+	VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
+	surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+	surfaceCreateInfo.pNext = nullptr;
+	surfaceCreateInfo.hinstance = m_hInstance;
+	surfaceCreateInfo.hwnd = m_hWnd;
+	result = vkCreateWin32SurfaceKHR(m_vkInstance, &surfaceCreateInfo, nullptr, &m_vkSurface);
+	assert(result == VK_SUCCESS);
+
+	std::unique_ptr<VkBool32[]> supportsPresent(new VkBool32[m_nQueueFamilyCount]);
+	for (uint32_t i = 0; i < m_nQueueFamilyCount; ++i)
+	{
+		vkGetPhysicalDeviceSurfaceSupportKHR(m_vkPhysicalDevice, i, m_vkSurface, &supportsPresent[i]);
+	}
+
+	uint32_t graphicsQueueFamilyIndex = UINT32_MAX;
+	uint32_t presentQueueFamilyIndex = UINT32_MAX;
+	for (uint32_t i = 0; i < m_nQueueFamilyCount; ++i)
+	{
+		if (m_pvkQueueFamilyProperties[i].queueFlags & VkQueueFlagBits::VK_QUEUE_GRAPHICS_BIT)
+		{
+			if (graphicsQueueFamilyIndex == UINT32_MAX)
+			{
+				graphicsQueueFamilyIndex = i;
+			}
+
+			if (supportsPresent[i] == VK_TRUE)
+			{
+				graphicsQueueFamilyIndex = i;
+				presentQueueFamilyIndex = i;
+				break;
+			}
+		}
+	}
+
+	if (presentQueueFamilyIndex == UINT32_MAX)
+	{
+		// graphic, present에 해당하는 큐를 못 찾았다면 별도의 present Queue를 찾는다.
+		for (uint32_t i = 0; i < m_nQueueFamilyCount; ++i) {
+			if (supportsPresent[i] == VK_TRUE) {
+				presentQueueFamilyIndex = i;
+				break;
+			}
+		}
+	}
+
+	if (graphicsQueueFamilyIndex == UINT32_MAX || presentQueueFamilyIndex == UINT32_MAX) 
+	{
+		ERR_EXIT("Could not find both graphics and present queues\n", "Swapchain Initialization Failure");
+	}
+
+	m_nGraphicQueueFamilyIndex = graphicsQueueFamilyIndex;
+	m_nPresentQueueFamilyIndex = presentQueueFamilyIndex;
+	m_bSeparatePresentQueue = (m_nGraphicQueueFamilyIndex != m_nPresentQueueFamilyIndex);
+
+	InitDevice();
+
+	vkGetDeviceQueue(m_vkDevice, m_nGraphicQueueFamilyIndex, 0, &m_vkGraphicsQueue);
+	if (!m_bSeparatePresentQueue)
+	{
+		m_vkPresentQueue = m_vkGraphicsQueue;
+	}
+	else
+	{
+		vkGetDeviceQueue(m_vkDevice, m_nPresentQueueFamilyIndex, 0, &m_vkPresentQueue);
+	}
+
+	// Get the list of VkFormat's that are supported:
+	uint32_t formatCount;
+	result = vkGetPhysicalDeviceSurfaceFormatsKHR(m_vkPhysicalDevice, m_vkSurface, &formatCount, nullptr);
+	assert(result == VK_SUCCESS);
+
+	std::unique_ptr<VkSurfaceFormatKHR[]> surfFormats(new VkSurfaceFormatKHR[formatCount]);
+	result = vkGetPhysicalDeviceSurfaceFormatsKHR(m_vkPhysicalDevice, m_vkSurface, &formatCount, surfFormats.get());
+	assert(result == VK_SUCCESS);
+
+	// If the format list includes just one entry of VK_FORMAT_UNDEFINED,
+	// the surface has no preferred format.  Otherwise, at least one
+	// supported format will be returned.
+	if (formatCount == 1 && surfFormats[0].format == VkFormat::VK_FORMAT_UNDEFINED) {
+		m_vkFormat = VkFormat::VK_FORMAT_B8G8R8A8_UNORM;
+	}
+	else {
+		assert(formatCount >= 1);
+		m_vkFormat = surfFormats[0].format;
+	}
+	m_vkColorSpace = surfFormats[0].colorSpace;
+	m_nCurrFrame = 0;
+
+	// Create semaphores to synchronize acquiring presentable buffers before
+	// rendering and waiting for drawing to be complete before presenting
+	VkSemaphoreCreateInfo semaphoreCreateInfo = VkSemaphoreCreateInfo();
+	semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	semaphoreCreateInfo.pNext = nullptr;
+	semaphoreCreateInfo.flags = 0;
+
+	// Create fences that we can use to throttle if we get too far
+	// ahead of the image presents
+	VkFenceCreateInfo fence_ci = VkFenceCreateInfo();
+	fence_ci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fence_ci.pNext = nullptr;
+	fence_ci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+	for (uint32_t i = 0; i < FRAME_LAG; i++) {
+		result = vkCreateFence(m_vkDevice, &fence_ci, nullptr, &m_vkDrawFence[i]);
+		assert(result == VK_SUCCESS);
+
+		result = vkCreateSemaphore(m_vkDevice, &semaphoreCreateInfo, nullptr, &m_vkImageAcquiredSemaphores[i]);
+		assert(result == VK_SUCCESS);
+
+		result = vkCreateSemaphore( m_vkDevice, &semaphoreCreateInfo, nullptr, &m_vkDrawCompleteSemaphores[i]);
+		assert(result == VK_SUCCESS);
+
+		if (m_bSeparatePresentQueue) {
+			result = vkCreateSemaphore(m_vkDevice, &semaphoreCreateInfo, nullptr, &m_vkLargeOwnershipSemaphores[i]);
+			assert(result == VK_SUCCESS);
+		}
+	}
+	m_nFrameIndex = 0;
+
+	// Get Memory information and properties
+	vkGetPhysicalDeviceMemoryProperties(m_vkPhysicalDevice, &m_vkPhysicalDeviceMemoryProperites);
 }
 
 VkResult VmFramework::InitDevice()
 {
 	VkResult result;
-	VkDeviceQueueCreateInfo deviceQueueCreateInfo = {};
-
+	VkDeviceQueueCreateInfo deviceQueueCreateInfo[2] = {};
 	float queue_priorities[1] = { 0.0 };
-
-	assert(m_nQueueFamilyPropertyCount >= 1);
-	deviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	deviceQueueCreateInfo.pNext = nullptr;
-	deviceQueueCreateInfo.queueCount = 1;
-	deviceQueueCreateInfo.pQueuePriorities = queue_priorities;
-	deviceQueueCreateInfo.queueFamilyIndex = m_nGraphicQueueFamilyIndex;
+	
+	deviceQueueCreateInfo[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	deviceQueueCreateInfo[0].pNext = nullptr;
+	deviceQueueCreateInfo[0].queueCount = 1;
+	deviceQueueCreateInfo[0].pQueuePriorities = queue_priorities;
+	deviceQueueCreateInfo[0].queueFamilyIndex = m_nGraphicQueueFamilyIndex;
 
 	VkDeviceCreateInfo deviceCreateInfo = {};
 	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	deviceCreateInfo.pNext = nullptr;
+	deviceCreateInfo.flags = 0;
 	deviceCreateInfo.queueCreateInfoCount = 1;
-	deviceCreateInfo.pQueueCreateInfos = &deviceQueueCreateInfo;
+	deviceCreateInfo.pQueueCreateInfos = &deviceQueueCreateInfo[0];
 	deviceCreateInfo.enabledLayerCount = 0;
 	deviceCreateInfo.ppEnabledLayerNames = nullptr;
-	deviceCreateInfo.enabledExtensionCount = m_vvkDeviceExtensionNames.size();
+	deviceCreateInfo.enabledExtensionCount = m_vvkExtensionNames.size();
 	deviceCreateInfo.ppEnabledExtensionNames =
-		deviceCreateInfo.enabledExtensionCount ? m_vvkDeviceExtensionNames.data() : nullptr;
+		deviceCreateInfo.enabledExtensionCount ? m_vvkExtensionNames.data() : nullptr;
 	deviceCreateInfo.pEnabledFeatures = nullptr;
-	
-	result = vkCreateDevice(m_vvkPhysicalDevices[0], &deviceCreateInfo, NULL, &m_vkDevice);
-	assert(result == VK_SUCCESS);
 
+	if (m_bSeparatePresentQueue)
+	{
+		deviceQueueCreateInfo[1].queueFamilyIndex = m_nPresentQueueFamilyIndex;
+		deviceQueueCreateInfo[1].queueCount = 1;
+		deviceQueueCreateInfo[1].pQueuePriorities = queue_priorities;
+		deviceCreateInfo.queueCreateInfoCount = 2;
+	}
+
+	result = vkCreateDevice(m_vkPhysicalDevice, &deviceCreateInfo, NULL, &m_vkDevice);
+	assert(result == VK_SUCCESS);
 	return result;
 }
 
@@ -220,17 +396,17 @@ void VmFramework::InitSwapChain(VkImageUsageFlags usageFlags)
 	VkResult result;
 	VkSurfaceCapabilitiesKHR surfCapabilities;
 
-	result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_vvkPhysicalDevices[0], m_vkSurface, &surfCapabilities);
+	result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_vkPhysicalDevice, m_vkSurface, &surfCapabilities);
 	assert(result == VK_SUCCESS);
 
 	uint32_t presentModeCount;
-	result = vkGetPhysicalDeviceSurfacePresentModesKHR(m_vvkPhysicalDevices[0], m_vkSurface, &presentModeCount, nullptr);
+	result = vkGetPhysicalDeviceSurfacePresentModesKHR(m_vkPhysicalDevice, m_vkSurface, &presentModeCount, nullptr);
 	assert(result == VK_SUCCESS);
 
 	VkPresentModeKHR* presentModes = (VkPresentModeKHR*)malloc(presentModeCount * sizeof(VkPresentModeKHR));
 	assert(presentModes);
 	
-	result = vkGetPhysicalDeviceSurfacePresentModesKHR(m_vvkPhysicalDevices[0], m_vkSurface, &presentModeCount, presentModes);
+	result = vkGetPhysicalDeviceSurfacePresentModesKHR(m_vkPhysicalDevice, m_vkSurface, &presentModeCount, presentModes);
 	assert(result == VK_SUCCESS);
 
 	VkExtent2D swapchainExtent;
@@ -403,160 +579,59 @@ void VmFramework::DestroyVulkan()
 	vkDestroyInstance(m_vkInstance, nullptr);
 }
 
-VkResult VmFramework::InitLayerProperties()
+void VmFramework::InitVulkan()
 {
-	uint32_t instance_layer_count;
-	VkLayerProperties *vk_props = NULL;
-	VkResult result;
+	uint32_t instance_extension_count = 0;
+	uint32_t instance_layer_count = 0;
+	uint32_t validation_layer_count = 0; // 아직까지의 예제에서 사용하지 않았다.
+	enabled_layer_count = 0;
 
-	// 드물지만 인스턴스 레이어 수가 변경될 수 있다.
-	// 예를 들어, 어떤 것을 설치하면 loader가 카운트의 초기 쿼리?와
-	// VkLayerProperties에 대한 요청 사이에서 픽업할 새로운 Layer를 포함할 수 있다.
-	// Loader는 VK_INCOMPLETE 상태를 반환하여 이를 나타내며, count parameter를 업데이트 한다.
-	// count parameter는 데이터 포인터에 로드된 항목 수만큼 업데이트 된다.
-	// → 레이어 수가 감소하거나 주어진 크기보다 작은 경우.
-	do {
-		result = vkEnumerateInstanceLayerProperties(&instance_layer_count, nullptr);
-		if (result)
-			return result;
+	// Cube 예시에서 인스턴스 레이어 수를 감지하지 않은 채로 사용했다.
+	// 인스턴스 레이어의 개념을 다시 한 번 복습하자.
+	// VkResult result = vkEnumerateInstanceLayerProperties(&instance_layer_count, nullptr);
+	VkBool32 surfaceExtFound = VK_FALSE;
+	VkBool32 platformSurfaceExtFound = VK_FALSE;
 
-		if (instance_layer_count == 0)
-			return VK_SUCCESS;
+	VkResult result = vkEnumerateInstanceExtensionProperties(nullptr, &instance_extension_count, nullptr);
+	assert(result == VkResult::VK_SUCCESS);
 
-		vk_props = (VkLayerProperties*)realloc(vk_props, instance_layer_count * sizeof(VkLayerProperties));
-		result = vkEnumerateInstanceLayerProperties(&instance_layer_count, vk_props);
-	} while (result == VK_INCOMPLETE);
-
-	// 여기서부터 각 인스턴스 계층에 대한 확장 목록을 수집한다. 
-	for (uint32_t i = 0; i < instance_layer_count; i++) {
-		layer_properties layer_props;
-		layer_props.properties = vk_props[i];
-
-		result = [&](layer_properties layerprops)->VkResult
-		{
-			VkExtensionProperties *instance_extensions;
-			uint32_t instance_extension_count;
-			VkResult res;
-			char *layer_name = NULL;
-
-			layer_name = layer_props.properties.layerName;
-
-			do {
-				res = vkEnumerateInstanceExtensionProperties(layer_name, &instance_extension_count, NULL);
-				if (res)
-					return res;
-				if (instance_extension_count == 0) {
-					return VK_SUCCESS;
-				}
-
-				layer_props.extensions.resize(instance_extension_count);
-				instance_extensions = layer_props.extensions.data();
-				res = vkEnumerateInstanceExtensionProperties(layer_name, &instance_extension_count, instance_extensions);
-			} while (res == VK_INCOMPLETE);
-
-			return res;
-		}(layer_props);
-
-		if (result)
-			return result;
-		m_vkInstanceLayerProperties.push_back(layer_props);
-	}
-	free(vk_props);
-
-	return result;
-}
-
-// 인스턴스, 논리 장치 생성 시의 확장명들을 Initialize
-void VmFramework::InitExtensionNames()
-{
-	m_vvkInstanceExtensionNames.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-	m_vvkInstanceExtensionNames.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-
-	m_vvkDeviceExtensionNames.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-}
-
-void VmFramework::CreateSurface()
-{
-	VkResult result;
-
-	// Surface 생성
-	VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
-	surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-	surfaceCreateInfo.pNext = nullptr;
-	surfaceCreateInfo.hinstance = m_hInstance;
-	surfaceCreateInfo.hwnd = m_hWnd;
-	result = vkCreateWin32SurfaceKHR(m_vkInstance, &surfaceCreateInfo, nullptr, &m_vkSurface);
-	assert(result == VK_SUCCESS);
-	// Queue Family와 Present
-	// > Present는 스왑체인 이미지 중 하나를 디스플레이로 옮겨와 볼 수 있도록 해준다.
-	// > 이를 요청하려면 vkQueuePresentKHR 기능을 사용하여 GPU의 Queue중 하나에 넣는다.
-	// > 아래는 함수가 참조하는 Queue가 그래픽 요청을 지원할 수 있는지를 검사한다.
-	VkBool32 *pSupportsPresent = (VkBool32*)malloc(m_nQueueFamilyPropertyCount * sizeof(VkBool32));
-	for (uint32_t i = 0; i < m_nQueueFamilyPropertyCount; i++)
+	if (instance_extension_count > 0)
 	{
-		// Present를 지원하는지 GPU Queue를 돌면서 확인한다.
-		vkGetPhysicalDeviceSurfaceSupportKHR(m_vvkPhysicalDevices[0], i, m_vkSurface, &pSupportsPresent[i]);
-	}
-	// Queue Family 목록에서 GPU와 Present를 함께 지원하는 항목을 찾는다.
-	m_nGraphicQueueFamilyIndex = UINT32_MAX;
-	m_nPresentQueueFamilyIndex = UINT32_MAX;
-	for (uint32_t i = 0; i < m_nQueueFamilyPropertyCount; ++i)
-	{
-		if ((m_vvkQueueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
-		{
-			if (m_nGraphicQueueFamilyIndex == UINT32_MAX)
-				m_nGraphicQueueFamilyIndex = i;
+		std::unique_ptr<VkExtensionProperties[]> instance_extensions(new VkExtensionProperties[instance_extension_count]);
+		result = vkEnumerateInstanceExtensionProperties(nullptr, &instance_extension_count, instance_extensions.get());
+		assert(result == VkResult::VK_SUCCESS);
 
-			if (pSupportsPresent[i] = VK_TRUE)
-			{
-				m_nGraphicQueueFamilyIndex = i;
-				m_nPresentQueueFamilyIndex = i;
-				break;
+		for (uint32_t i = 0; i < instance_extension_count; ++i)
+		{
+			if (!strcmp(VK_KHR_SURFACE_EXTENSION_NAME, instance_extensions[i].extensionName)) {
+				surfaceExtFound = 1;
+				m_vvkExtensionNames.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
 			}
+			if (!strcmp(VK_KHR_WIN32_SURFACE_EXTENSION_NAME, instance_extensions[i].extensionName)) {
+				platformSurfaceExtFound = 1;
+				m_vvkExtensionNames.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+			}
+			assert(m_vvkExtensionNames.size() < 64);
 		}
 	}
-	if (m_nPresentQueueFamilyIndex == UINT32_MAX)
-	{
-		// GPU와 Present를 모두 지원하는 Queue를 찾지 못했을 경우 별도의 Queue를 찾는다.
-		for (size_t i = 0; i < m_nQueueFamilyPropertyCount; ++i)
-		{
-			if (pSupportsPresent[i] == VK_TRUE)
-			{
-				m_nPresentQueueFamilyIndex = i;
-				break;
-			}
-		}
-	}
-	free(pSupportsPresent);
-
-	// 그래픽 지원되는 Queue를 찾을 수 없을 때 발생시킬 오류
-	if (m_nGraphicQueueFamilyIndex == UINT32_MAX || m_nPresentQueueFamilyIndex == UINT32_MAX)
-	{
-		std::cout << "[ERROR] Could not find a queues for graphics and present" << std::endl;
-		exit(-1);
+	if (!surfaceExtFound) {
+		ERR_EXIT("vkEnumerateInstanceExtensionProperties failed to find the " VK_KHR_SURFACE_EXTENSION_NAME
+			" extension.\n\n"
+			"Do you have a compatible Vulkan installable client driver (ICD) installed?\n"
+			"Please look at the Getting Started guide for additional information.\n",
+			"vkCreateInstance Failure");
 	}
 
-	// 지원되는 VkFormat들의 리스트를 얻어온다.
-	uint32_t formatCount;
-	result = vkGetPhysicalDeviceSurfaceFormatsKHR(m_vvkPhysicalDevices[0], m_vkSurface, &formatCount, nullptr);
-	assert(result == VK_SUCCESS);
-
-	VkSurfaceFormatKHR *surfFormats = (VkSurfaceFormatKHR *)malloc(formatCount * sizeof(VkSurfaceFormatKHR));
-	result = vkGetPhysicalDeviceSurfaceFormatsKHR(m_vvkPhysicalDevices[0], m_vkSurface, &formatCount, surfFormats);
-	assert(result == VK_SUCCESS);
-
-	// 형식 목록에 VK_FORMAT_UNDEFINED가 포함된 것이 있는 경우 해당 Surface가 선호되지 않는다.
-	// VK_FORMAT_UNDEFINED가 포함되어 있지 않다면 지원되는 형식이 하나 이상 반환된다.
-	if (formatCount == 1 && surfFormats[0].format == VK_FORMAT_UNDEFINED)
-	{
-		m_vkFormat = VK_FORMAT_B8G8R8A8_UNORM;
+	if (!platformSurfaceExtFound) {
+		ERR_EXIT("vkEnumerateInstanceExtensionProperties failed to find the " VK_KHR_WIN32_SURFACE_EXTENSION_NAME
+			" extension.\n\n"
+			"Do you have a compatible Vulkan installable client driver (ICD) installed?\n"
+			"Please look at the Getting Started guide for additional information.\n",
+			"vkCreateInstance Failure");
 	}
-	else
-	{
-		assert(formatCount >= 1);
-		m_vkFormat = surfFormats[0].format;
-	}
-	free(surfFormats);
+
+	InitVKInstance();
+	InitEnumerateDevice();
 }
 
 void VmFramework::CreateDepthBuffer()
@@ -571,7 +646,7 @@ void VmFramework::CreateDepthBuffer()
 	const VkFormat depth_format = m_Depth.format;
 
 	VkFormatProperties props;
-	vkGetPhysicalDeviceFormatProperties(m_vvkPhysicalDevices[0], m_Depth.format, &props);
+	vkGetPhysicalDeviceFormatProperties(m_vkPhysicalDevice, m_Depth.format, &props);
 	if (props.linearTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) 
 	{
 		image_info.tiling = VK_IMAGE_TILING_LINEAR;
@@ -729,7 +804,7 @@ void VmFramework::InitUniformBuffer()
 	//								glm::vec3(0.0f, 0.0f, -400.0f),
 	//								glm::vec3(0.0f, 1.0f, 0.0f));
 
-	glm::mat4 mtxView = glm::lookAt(glm::vec3(25.0f,00,0.0f),
+	glm::mat4 mtxView = glm::lookAt(glm::vec3(25.0f, 0.0f, 0.0f), 
 									glm::vec3(0.0f, 0.0f, 0.0f),
 									glm::vec3(0.0f, 1.0f, 0.0f));
 
@@ -1585,44 +1660,6 @@ void VmFramework::UpdateDataBuffer()
 
 	m_nCurrent_Buffer++;
 	m_nCurrent_Buffer %= m_nSwapchainImageCount;
-}
-
-void VmFramework::CreateSemaphoreAndFence()
-{
-	VkResult result;
-
-	// Create semaphores to synchronize acquiring presentable buffers before
-	// rendering and waiting for drawing to be complete before presenting
-	VkSemaphoreCreateInfo semaphoreCreateInfo;
-
-	semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-	semaphoreCreateInfo.pNext = nullptr;
-	semaphoreCreateInfo.flags = 0;
-
-	// Create fences that we can use to throttle if we get too far
-	// ahead of the image presents
-	VkFenceCreateInfo fenceInfo = {};
-	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-	fenceInfo.pNext = nullptr;
-	fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-	for (uint32_t i = 0; i < m_nSwapchainImageCount; i++)
-	{
-		result = vkCreateFence(m_vkDevice, &fenceInfo, nullptr, &m_vkDrawFence[i]);
-		assert(result == VK_SUCCESS);
-
-		result = vkCreateSemaphore(m_vkDevice, &semaphoreCreateInfo, nullptr, &m_vkImageAcquiredSemaphores[i]);
-		assert(result == VK_SUCCESS);
-
-		result = vkCreateSemaphore(m_vkDevice, &semaphoreCreateInfo, nullptr, &m_vkDrawCompleteSemaphores[i]);
-		assert(result == VK_SUCCESS);
-
-		//if (demo->separate_present_queue) {
-		//	err = vkCreateSemaphore(demo->device, &semaphoreCreateInfo, NULL,
-		//		&demo->image_ownership_semaphores[i]);
-		//	assert(!err);
-	}
-	m_nCurrent_Buffer = 0;
 }
 
 void VmFramework::Render()

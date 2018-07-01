@@ -2,6 +2,15 @@
 #include "Texture.h"
 #include "FBXModel.h"
 
+#define ERR_EXIT(err_msg, err_class)							\
+    do {														\
+        MessageBox(nullptr, L##err_msg, L##err_class, MB_OK);	\
+        exit(1);												\
+    } while (0)
+
+// Allow a maximum of two outstanding presentation operations.
+#define FRAME_LAG 2
+
 typedef struct {
 	VkLayerProperties properties;
 	std::vector<VkExtensionProperties> extensions;
@@ -41,13 +50,37 @@ private:
 
 	const uint32_t NUM_DESCRIPTOR_SETS = 1;
 	
-	VkResult InitLayerProperties();
-	void InitExtensionNames();
-	void InitApplication();
-	VkResult InitEnumerateDevice(uint32_t physicalDeviceCount = 1);
-	void CreateSurface();
-	void CreateDepthBuffer();
+	void InitVulkan();
+	void InitVKInstance();
+	VkResult InitEnumerateDevice(); // GPU 정보를 얻어온다.
+	void InitVKSwapChain();
 	VkResult InitDevice();
+
+	uint32_t enabled_extension_count;
+	uint32_t enabled_layer_count;
+	std::vector<const char*> m_vvkExtensionNames;
+	VkPhysicalDevice m_vkPhysicalDevice;
+	VkPhysicalDeviceProperties m_vkPhysicalDeviceProperties;
+	uint32_t m_nQueueFamilyCount; /// PropertyCount -> Count
+	std::unique_ptr<VkQueueFamilyProperties[]> m_pvkQueueFamilyProperties;
+	VkSurfaceKHR m_vkSurface;
+	uint32_t m_nGraphicQueueFamilyIndex;
+	uint32_t m_nPresentQueueFamilyIndex;
+	bool m_bSeparatePresentQueue;
+	VkQueue m_vkGraphicsQueue;
+	VkQueue m_vkPresentQueue;
+	VkFormat m_vkFormat;
+	VkColorSpaceKHR m_vkColorSpace;
+	VkFence m_vkDrawFence[2];
+	VkSemaphore m_vkImageAcquiredSemaphores[2];
+	VkSemaphore m_vkDrawCompleteSemaphores[2];
+	VkSemaphore m_vkLargeOwnershipSemaphores[2];
+	uint32_t m_nCurrFrame;
+	uint32_t m_nFrameIndex;
+	VkPhysicalDeviceMemoryProperties m_vkPhysicalDeviceMemoryProperites;
+	///
+
+	void CreateDepthBuffer();
 	void InitCommandPool();
 	void InitCommandBuffer();
 	void InitDeviceQueue();
@@ -73,20 +106,15 @@ private:
 
 	void UpdateDataBuffer();
 
-	void CreateSemaphoreAndFence();
-	
 	HWND m_hWnd;
 	HINSTANCE m_hInstance;
 
 	VkInstance m_vkInstance;
 	std::vector<VkQueueFamilyProperties> m_vvkQueueFamilyProperties;
-	std::vector<VkPhysicalDevice> m_vvkPhysicalDevices;
+
 	VkDevice m_vkDevice;
 	std::vector<const char*> m_vvkDeviceExtensionNames;
-	std::vector<const char*> m_vvkInstanceExtensionNames;
 	std::vector<layer_properties> m_vkInstanceLayerProperties;
-	VkSurfaceKHR m_vkSurface;
-	VkFormat m_vkFormat;
 
 	VkSwapchainKHR m_vkSwapchain;
 	std::vector<swap_chain_buffer> m_vvkSwapchainBuffers;
@@ -94,16 +122,10 @@ private:
 	VkCommandBuffer m_vkCommandBuffer;
 	VkCommandPool m_vkCommandPool;
 
-	uint32_t m_nQueueFamilyPropertyCount;
-	uint32_t m_nGraphicQueueFamilyIndex;
-	uint32_t m_nGraphicQueueFamilyCount;
-	uint32_t m_nPresentQueueFamilyIndex;
 
 	int m_nWindowWidth;
 	int m_nWindowHeight;
 
-	VkPhysicalDeviceMemoryProperties m_vkPhysicalDeviceMemoryProperites;
-	VkPhysicalDeviceProperties m_vkPhysicalDeviceProperties;
 
 	depth m_Depth;
 	uniform_data m_UniformData;
@@ -123,9 +145,6 @@ private:
 	char* read_spv(const char* filename, size_t* pSize);
 
 	VkFramebuffer* m_pFrameBuffers;
-
-	VkQueue m_vkGraphicsQueue;
-	VkQueue m_vkPresentQueue;
 
 	struct {
 		VkBuffer buf;
@@ -147,9 +166,6 @@ private:
 	VkViewport m_vkViewport;
 	VkRect2D m_vkScissor;
 	
-	VkFence m_vkDrawFence[2];
-	VkSemaphore m_vkImageAcquiredSemaphores[2];
-	VkSemaphore m_vkDrawCompleteSemaphores[2];
 
 	glm::mat4 m_mtxVP;
 	glm::mat4 m_mtxModel;
