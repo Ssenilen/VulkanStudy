@@ -28,6 +28,12 @@
     <Filter Include="소스 파일\FbxModel">
       <UniqueIdentifier>{cb757d12-4157-4d44-808d-cb8fb62d3161}</UniqueIdentifier>
     </Filter>
+    <Filter Include="소스 파일\GameScene">
+      <UniqueIdentifier>{d8525942-84b2-45fe-9cf7-01723797f459}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\GameObject">
+      <UniqueIdentifier>{9d4cf2bb-04bc-4bd7-8995-000d614b3b1b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Text Include="ReadMe.txt" />
@@ -66,6 +72,15 @@
     <ClInclude Include="Common.h">
       <Filter>소스 파일\FbxModel</Filter>
     </ClInclude>
+    <ClInclude Include="VmGameScene.h">
+      <Filter>소스 파일\GameScene</Filter>
+    </ClInclude>
+    <ClInclude Include="VmGameObject.h">
+      <Filter>소스 파일\GameObject</Filter>
+    </ClInclude>
+    <ClInclude Include="define.h">
+      <Filter>소스 파일\WinMain</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -86,6 +101,12 @@
     <ClCompile Include="Common.cxx">
       <Filter>소스 파일\FbxModel</Filter>
     </ClCompile>
+    <ClCompile Include="VmGameScene.cpp">
+      <Filter>소스 파일\GameScene</Filter>
+    </ClCompile>
+    <ClCompile Include="VmGameObject.cpp">
+      <Filter>소스 파일\GameObject</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="VmEngine.rc">
@@ -101,10 +122,10 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
-    <None Include="default.frag">
+    <None Include="Shader\skeletalmesh.frag">
       <Filter>소스 파일\Shader</Filter>
     </None>
-    <None Include="default.vert">
+    <None Include="Shader\skeletalmesh.vert">
       <Filter>소스 파일\Shader</Filter>
     </None>
   </ItemGroup>

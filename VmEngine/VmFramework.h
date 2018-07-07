@@ -42,7 +42,7 @@ public:
 
 	void VmInitialize(HINSTANCE hInstance, HWND hWnd, const int nWindowWidth, const int nWindowHeight);
 	void DestroyVulkan();
-	void Render();
+	void Tick();
 
 private:
 	/* Amount of time, in nanoseconds, to wait for a command buffer to complete */
@@ -55,6 +55,9 @@ private:
 	VkResult InitEnumerateDevice(); // GPU 정보를 얻어온다.
 	void InitVKSwapChain();
 	VkResult InitDevice();
+	void CreateCommandPoolAndCommandBuffer();
+	void CreateSwapChainBuffer(VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+	void CreateDepthBuffer();
 
 	uint32_t enabled_extension_count;
 	uint32_t enabled_layer_count;
@@ -80,11 +83,6 @@ private:
 	VkPhysicalDeviceMemoryProperties m_vkPhysicalDeviceMemoryProperites;
 	///
 
-	void CreateDepthBuffer();
-	void InitCommandPool();
-	void InitCommandBuffer();
-	void InitDeviceQueue();
-	void InitSwapChain(VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 
 	bool memory_type_from_properties(uint32_t typeBits, VkFlags requirements_mask, uint32_t *typeIndex);
 	void InitUniformBuffer();

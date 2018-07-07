@@ -35,6 +35,7 @@
 #include <glm\gtx\euler_angles.hpp>
 
 #include "linmath.h"
+#include "define.h"
 
 #pragma comment(lib, "vulkan-1.lib")
 #pragma comment(lib, "libfbxsdk-md.lib")

@@ -6,6 +6,7 @@
 #define NUM_VIEWPORTS 1
 #define NUM_SCISSORS NUM_VIEWPORTS
 #define NUM_SAMPLES VK_SAMPLE_COUNT_1_BIT
+#define USING_TEXTURE true
 
 VmFramework::VmFramework()
 	: m_hWnd(0),
@@ -46,33 +47,29 @@ void VmFramework::VmInitialize(HINSTANCE hInstance, HWND hWnd, const int nWindow
 
 	InitVulkan();
 	InitVKSwapChain();
-	///
-	InitCommandPool();
-	InitCommandBuffer();
-	InitDeviceQueue();
-	InitSwapChain();
+	CreateCommandPoolAndCommandBuffer();
+	CreateSwapChainBuffer();
 	CreateDepthBuffer();
-	InitUniformBuffer();
 
+	/// 모델 생성
+	m_pCubeTexture = new Texture(m_vkDevice, m_vkCommandBuffer, m_vkPhysicalDeviceMemoryProperites, "castle_guard.png");
+	m_Texture = m_pCubeTexture->GetTextureObject();
 	m_pFbxModel = new FBXModel("cg_dance2.fbx");
 	InitBoneUniformBuffer();
-
-	m_pFbxModel->GetPositionData();
-
-	InitDescriptorSetAndPipelineLayout(true);
+	///
+	InitUniformBuffer();
+	InitDescriptorSetAndPipelineLayout(USING_TEXTURE);
 	InitRenderPass(depthPresent);
 	InitShaders();
 	InitFrameBuffer(depthPresent);
 
 	
-	InitVertexBuffer(true);
+	InitVertexBuffer(USING_TEXTURE);
 	InitIndexBuffer();
-	InitDescriptorPool(true);
+	InitDescriptorPool(USING_TEXTURE);
 
-	m_pCubeTexture = new Texture(m_vkDevice, m_vkCommandBuffer, m_vkPhysicalDeviceMemoryProperites, "castle_guard.png");
-	m_Texture = m_pCubeTexture->GetTextureObject();
 
-	InitDescriptorSet(true);
+	InitDescriptorSet(USING_TEXTURE);
 	InitPipelineCache();
 	InitPipeline(depthPresent);
 }
@@ -339,7 +336,7 @@ VkResult VmFramework::InitDevice()
 	return result;
 }
 
-void VmFramework::InitCommandPool()
+void VmFramework::CreateCommandPoolAndCommandBuffer()
 {
 	VkResult result;
 
@@ -351,13 +348,8 @@ void VmFramework::InitCommandPool()
 	
 	result = vkCreateCommandPool(m_vkDevice, &commandPoolInfo, nullptr, &m_vkCommandPool);
 	assert(result == VK_SUCCESS);
-}
 
-void VmFramework::InitCommandBuffer()
-{
 	// InitSwapChain과 InitCommandPool이 선행되어야 한다.
-	VkResult result;
-
 	VkCommandBufferAllocateInfo commandBufferInfo = {};
 	commandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	commandBufferInfo.pNext = NULL;
@@ -378,20 +370,7 @@ void VmFramework::InitCommandBuffer()
 	assert(result == VK_SUCCESS);
 }
 
-void VmFramework::InitDeviceQueue()
-{
-	vkGetDeviceQueue(m_vkDevice, m_nGraphicQueueFamilyIndex, 0, &m_vkGraphicsQueue);
-	if (m_nGraphicQueueFamilyIndex == m_nPresentQueueFamilyIndex)
-	{
-		m_vkPresentQueue = m_vkGraphicsQueue;
-	}
-	else
-	{
-		vkGetDeviceQueue(m_vkDevice, m_nPresentQueueFamilyIndex, 0, &m_vkPresentQueue);
-	}
-}
-
-void VmFramework::InitSwapChain(VkImageUsageFlags usageFlags)
+void VmFramework::CreateSwapChainBuffer(VkImageUsageFlags usageFlags)
 {
 	VkResult result;
 	VkSurfaceCapabilitiesKHR surfCapabilities;
@@ -1172,7 +1151,7 @@ void VmFramework::InitShaders()
 	m_ShaderStages[0].pName = "main";
 
 	size_t size = 0;
-	void* vertShaderCode = read_spv("default_vert.spv", &size);
+	void* vertShaderCode = read_spv("Shader/skeletalmesh_vert.spv", &size);
 
 	moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	moduleCreateInfo.pNext = nullptr;
@@ -1192,7 +1171,7 @@ void VmFramework::InitShaders()
 	m_ShaderStages[1].pName = "main";
 
 	size = 0;
-	void* fragShaderCode = read_spv("default_frag.spv", &size);
+	void* fragShaderCode = read_spv("Shader/skeletalmesh_frag.spv", &size);
 
 	moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	moduleCreateInfo.pNext = nullptr;
@@ -1536,10 +1515,6 @@ void VmFramework::UpdateDataBuffer()
 {
 	VkResult result;
 	uint8_t *pData;
-	//mat4x4 mtxRotation, mtxMVP, mtxModel, mtxMVP2;
-	//mat4x4_dup(mtxModel, m_mtxModel);
-	//mat4x4_rotate(m_mtxModel, mtxModel, 0.0f, 1.0f, 0.0f, (float)degreesToRadians(1.0f));
-	//mat4x4_mul(m_mtxModel, m_mtxModel, mtxRotation);
 	
 	vkWaitForFences(m_vkDevice, 1, &m_vkDrawFence[m_nCurrent_Buffer], VK_TRUE, UINT64_MAX);
 	vkResetFences(m_vkDevice, 1, &m_vkDrawFence[m_nCurrent_Buffer]);
@@ -1562,17 +1537,6 @@ void VmFramework::UpdateDataBuffer()
 		assert(result == VK_SUCCESS);
 	}
 
-	
-	//m_mtxModel[3][0] += 0.001f;
-
-	//mat4x4_mul(mtxMVP, m_mtxVP, m_mtxModel);
-
-	//mat4x4 clip{ 1.0f, 0.0f, 0.0f, 0.0f,
-	//			0.0f, -1.0f, 0.0f, 0.0f,
-	//			0.0f, 0.0f, 0.5f, 0.0f,
-	//			0.0f, 0.0f, 0.5f, 1.0f };
-
-	//mat4x4_mul(mtxMVP2, clip, mtxMVP);
 
 	/// ---임시임시임시임시--- 나중에 카메라기능 따로 뺍시다 ---임시임시임시임시---
 	/// ---임시임시임시임시--- 나중에 카메라기능 따로 뺍시다 ---임시임시임시임시---
@@ -1662,7 +1626,7 @@ void VmFramework::UpdateDataBuffer()
 	m_nCurrent_Buffer %= m_nSwapchainImageCount;
 }
 
-void VmFramework::Render()
+void VmFramework::Tick()
 {
 	VkResult result;
 

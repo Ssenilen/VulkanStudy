@@ -157,6 +157,7 @@
   <ItemGroup>
     <ClInclude Include="Common.h" />
     <ClInclude Include="cube_data.h" />
+    <ClInclude Include="define.h" />
     <ClInclude Include="FBXModel.h" />
     <ClInclude Include="linmath.h" />
     <ClInclude Include="Resource.h" />
@@ -166,6 +167,8 @@
     <ClInclude Include="main.h" />
     <ClInclude Include="Texture.h" />
     <ClInclude Include="VmFramework.h" />
+    <ClInclude Include="VmGameObject.h" />
+    <ClInclude Include="VmGameScene.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Common.cxx" />
@@ -179,6 +182,8 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Texture.cpp" />
     <ClCompile Include="VmFramework.cpp" />
+    <ClCompile Include="VmGameObject.cpp" />
+    <ClCompile Include="VmGameScene.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="VmEngine.rc" />
@@ -188,10 +193,10 @@
     <Image Include="VmEngine.ico" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="default.frag">
+    <None Include="Shader\skeletalmesh.frag">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </None>
-    <None Include="default.vert">
+    <None Include="Shader\skeletalmesh.vert">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </None>
   </ItemGroup>

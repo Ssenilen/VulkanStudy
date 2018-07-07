@@ -64,7 +64,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 		}
 		else
 		{
-			g_VmFramework.Render();
+			g_VmFramework.Tick();		
 		}
 	}
 	g_VmFramework.DestroyVulkan();
