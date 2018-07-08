@@ -1,16 +1,21 @@
 #include "stdafx.h"
-#include "VmFramework.h"
-
+#include "VmTimer.h"
+#include "VmGameScene.h"
 #include "cube_data.h"
+#include "VmFramework.h"
 
 #define NUM_VIEWPORTS 1
 #define NUM_SCISSORS NUM_VIEWPORTS
 #define NUM_SAMPLES VK_SAMPLE_COUNT_1_BIT
 #define USING_TEXTURE true
 
+VmGameScene g_GameScene;
+VmTimer g_GameTimer;
+
 VmFramework::VmFramework()
 	: m_hWnd(0),
 	m_hInstance(0),
+	m_pWindowTitle(nullptr),
 	m_vkInstance(0),
 	m_vkDevice(0),
 	m_vkSurface(0),
@@ -35,13 +40,14 @@ VmFramework::~VmFramework()
 {
 }
 
-void VmFramework::VmInitialize(HINSTANCE hInstance, HWND hWnd, const int nWindowWidth, const int nWindowHeight)
+void VmFramework::VmInitialize(HINSTANCE hInstance, HWND hWnd, TCHAR* pWindowTitle, const int nWindowWidth, const int nWindowHeight)
 {
 	VkResult result;
 	const bool depthPresent = true;
 
 	m_hInstance = hInstance;
 	m_hWnd = hWnd;
+	m_pWindowTitle = pWindowTitle;
 	m_nWindowWidth = nWindowWidth;
 	m_nWindowHeight = nWindowHeight;
 
@@ -50,6 +56,9 @@ void VmFramework::VmInitialize(HINSTANCE hInstance, HWND hWnd, const int nWindow
 	CreateCommandPoolAndCommandBuffer();
 	CreateSwapChainBuffer();
 	CreateDepthBuffer();
+
+	g_GameScene.Initialize();
+	g_GameTimer.Start();
 
 	/// 모델 생성
 	m_pCubeTexture = new Texture(m_vkDevice, m_vkCommandBuffer, m_vkPhysicalDeviceMemoryProperites, "castle_guard.png");
@@ -71,6 +80,8 @@ void VmFramework::VmInitialize(HINSTANCE hInstance, HWND hWnd, const int nWindow
 
 	InitDescriptorSet(USING_TEXTURE);
 	InitPipeline(depthPresent);
+
+	g_GameTimer.Start();
 }
 
 void VmFramework::InitVKInstance()
@@ -260,7 +271,6 @@ void VmFramework::InitVKSwapChain()
 		m_vkFormat = surfFormats[0].format;
 	}
 	m_vkColorSpace = surfFormats[0].colorSpace;
-	m_nCurrFrame = 0;
 
 	// Create semaphores to synchronize acquiring presentable buffers before
 	// rendering and waiting for drawing to be complete before presenting
@@ -291,7 +301,6 @@ void VmFramework::InitVKSwapChain()
 			assert(result == VK_SUCCESS);
 		}
 	}
-	m_nFrameIndex = 0;
 
 	// Get Memory information and properties
 	vkGetPhysicalDeviceMemoryProperties(m_vkPhysicalDevice, &m_vkPhysicalDeviceMemoryProperites);
@@ -1603,6 +1612,8 @@ void VmFramework::Present()
 
 void VmFramework::Tick()
 {
+	g_GameTimer.Tick();
+
 	VkResult result;
 
 	VkClearValue clear_values[2];
@@ -1639,53 +1650,7 @@ void VmFramework::Tick()
 		const VkDeviceSize offsets[1] = { 0 };
 		vkCmdBindVertexBuffers(m_vkCommandBuffer, 0, 1, &vertex_buffer.buf, offsets);
 		vkCmdBindIndexBuffer(m_vkCommandBuffer, index_buffer.buf, 0, VK_INDEX_TYPE_UINT16);
-		{
-			// 디스크립터 셋 업데이트
-			VkWriteDescriptorSet writes[3];
-
-			writes[0] = {};
-			writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			writes[0].pNext = nullptr;
-			writes[0].dstSet = m_vDesc_Set[0];
-			writes[0].descriptorCount = 1;
-			writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			writes[0].pBufferInfo = &m_UniformData.buffer_info;
-			writes[0].dstArrayElement = 0;
-			writes[0].dstBinding = 0;
-
-
-			writes[1] = {};
-			writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			writes[1].pNext = nullptr;
-			writes[1].dstSet = m_vDesc_Set[0];
-			writes[1].descriptorCount = 1;
-			writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			writes[1].pBufferInfo = &m_BoneUniformData.buffer_info;
-			writes[1].dstArrayElement = 0;
-			writes[1].dstBinding = 1;
-
-			VkDescriptorImageInfo tex_descs[TEXTURE_COUNT];
-			memset(&tex_descs, 0, sizeof(tex_descs));
-			for (unsigned int i = 0; i < TEXTURE_COUNT; i++)
-			{
-				tex_descs[i].sampler = m_Texture.sampler;
-				tex_descs[i].imageView = m_Texture.view;
-				tex_descs[i].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-			}
-
-			writes[2] = {};
-			writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			writes[2].dstSet = m_vDesc_Set[0];
-			writes[2].dstBinding = 2;
-			writes[2].descriptorCount = 1;
-			writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			writes[2].pImageInfo = tex_descs;
-			writes[2].dstArrayElement = 0;
-
-			// Cube.c 2227 Line
-			vkUpdateDescriptorSets(m_vkDevice, 3, writes, 0, nullptr);
-		}
-
+	
 		vkCmdBindPipeline(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline);
 		vkCmdBindDescriptorSets(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline_Layout, 0, NUM_DESCRIPTOR_SETS, m_vDesc_Set.data(), 0, nullptr);
 
@@ -1699,9 +1664,9 @@ void VmFramework::Tick()
 
 	result = vkEndCommandBuffer(m_vkCommandBuffer);
 	assert(result == VK_SUCCESS);
-	
+
 	Present();
-	Sleep(1);
+	CalculateFrameStats();
 }
 
 char* VmFramework::read_spv(const char* filename, size_t* pSize)
@@ -1766,6 +1731,28 @@ void VmFramework::CameraMove(WPARAM wParam)
 		m_pFbxModel->AdvanceFrame();
 		break;
 	}
-	
+
 	std::cout << "Camera Pos: " << m_fCameraPosX << " " << m_fCameraPosY << " " << m_fCameraPosZ << std::endl;
+}
+
+void VmFramework::CalculateFrameStats()
+{
+	static float fTimeElapsed = g_GameTimer.TotalTime();
+	static int nFrameCount = 0;
+
+	nFrameCount++;
+
+	if ((g_GameTimer.TotalTime() - fTimeElapsed) >= 1.0f)
+	{
+		float mspf = 1000.0f / (float)nFrameCount;
+
+		std::wostringstream	outs;
+		outs.precision(6);
+
+		outs << m_pWindowTitle << L"   FPS: " << nFrameCount << L"   FrameTime: " << mspf << L"(ms)";
+		SetWindowText(m_hWnd, outs.str().c_str());
+
+		nFrameCount = 0;
+		fTimeElapsed += 1.0f;
+	}
 }

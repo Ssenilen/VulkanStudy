@@ -1,4 +1,7 @@
 #pragma once
+
+class VmGameObject;
+
 class VmGameScene
 {
 public:

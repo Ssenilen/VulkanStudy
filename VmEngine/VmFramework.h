@@ -40,7 +40,7 @@ public:
 	VmFramework();
 	~VmFramework();
 
-	void VmInitialize(HINSTANCE hInstance, HWND hWnd, const int nWindowWidth, const int nWindowHeight);
+	void VmInitialize(HINSTANCE hInstance, HWND hWnd, TCHAR* pWindowTitle, const int nWindowWidth, const int nWindowHeight);
 	void DestroyVulkan();
 	void Tick();
 
@@ -58,6 +58,10 @@ private:
 	void CreateCommandPoolAndCommandBuffer();
 	void CreateSwapChainBuffer(VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 	void CreateDepthBuffer();
+
+	void CalculateFrameStats();
+
+
 
 	uint32_t enabled_extension_count;
 	uint32_t enabled_layer_count;
@@ -78,8 +82,6 @@ private:
 	VkSemaphore m_vkImageAcquiredSemaphores[2];
 	VkSemaphore m_vkDrawCompleteSemaphores[2];
 	VkSemaphore m_vkLargeOwnershipSemaphores[2];
-	uint32_t m_nCurrFrame;
-	uint32_t m_nFrameIndex;
 	VkPhysicalDeviceMemoryProperties m_vkPhysicalDeviceMemoryProperites;
 	///
 
@@ -105,6 +107,7 @@ private:
 
 	HWND m_hWnd;
 	HINSTANCE m_hInstance;
+	TCHAR* m_pWindowTitle;
 
 	VkInstance m_vkInstance;
 	std::vector<VkQueueFamilyProperties> m_vvkQueueFamilyProperties;

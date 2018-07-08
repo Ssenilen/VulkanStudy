@@ -37,6 +37,9 @@
     <Filter Include="소스 파일\Shader">
       <UniqueIdentifier>{9e642f33-89c8-4ff4-ba87-310805dee6d0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="소스 파일\Timer">
+      <UniqueIdentifier>{6bc230c7-1acd-4333-958a-cad0f1b3b88b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Text Include="ReadMe.txt" />
@@ -85,7 +88,10 @@
       <Filter>소스 파일\WinMain</Filter>
     </ClInclude>
     <ClInclude Include="VmShader.h">
-      <Filter>헤더 파일</Filter>
+      <Filter>소스 파일\Shader</Filter>
+    </ClInclude>
+    <ClInclude Include="VmTimer.h">
+      <Filter>소스 파일\Timer</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -114,7 +120,10 @@
       <Filter>소스 파일\GameObject</Filter>
     </ClCompile>
     <ClCompile Include="VmShader.cpp">
-      <Filter>소스 파일</Filter>
+      <Filter>소스 파일\Shader</Filter>
+    </ClCompile>
+    <ClCompile Include="VmTimer.cpp">
+      <Filter>소스 파일\Timer</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

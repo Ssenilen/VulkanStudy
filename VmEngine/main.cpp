@@ -49,7 +49,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	//_CrtSetBreakAlloc(347);
 #endif
 
-	g_VmFramework.VmInitialize(g_hInstance, g_hWnd, g_nWindowWidth, g_nWindowHeight);
+	g_VmFramework.VmInitialize(g_hInstance, g_hWnd, szTitle, g_nWindowWidth, g_nWindowHeight);
 
 	while (1)
 	{
@@ -99,7 +99,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	g_hInstance = hInstance;
 	RECT wr = { 0, 0, g_nWindowWidth, g_nWindowHeight }; // 부들부들
 	AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);
-	g_hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX,
+	g_hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_BORDER,
 		CW_USEDEFAULT, 0, wr.right - wr.left, wr.bottom - wr.top, nullptr, nullptr, hInstance, nullptr);
 
 	if (!g_hWnd)
