@@ -95,14 +95,13 @@ private:
 	void InitFrameBuffer(bool include_depth);
 	void InitVertexBuffer(bool use_texture);
 	void InitIndexBuffer();
-	
-	void InitPipelineCache();
 	void InitPipeline(bool include_depth, bool include_vi = true);
 	
 	void Init_Viewports();
 	void Init_Scissors();
 
-	void UpdateDataBuffer();
+	void UpdateDataBuffer(int cubeNum);
+	void Present();
 
 	HWND m_hWnd;
 	HINSTANCE m_hInstance;
@@ -133,7 +132,6 @@ private:
 	std::vector<VkDescriptorSet> m_vDesc_Set;
 
 	VkPipelineLayout m_vkPipeline_Layout;
-	VkPipelineCache m_vkPipeline_Cache;
 	VkDescriptorPool m_Desc_Pool;	
 
 	VkRenderPass m_Render_Pass;
@@ -173,6 +171,8 @@ private:
 	texture_object m_Texture;
 
 	FBXModel* m_pFbxModel;
+	FBXModel* m_pFbxModel2;
+	FBXModel* m_pFbxModel3;
 
 	// ------------------------------
 	float m_fCameraPosX;

@@ -19,9 +19,6 @@
     <Filter Include="소스 파일\Framework">
       <UniqueIdentifier>{e296be40-b183-445f-85e4-a4c16b1de6e7}</UniqueIdentifier>
     </Filter>
-    <Filter Include="소스 파일\Shader">
-      <UniqueIdentifier>{5e4fbde1-2719-439d-84ed-5180aa5e9a86}</UniqueIdentifier>
-    </Filter>
     <Filter Include="소스 파일\Texture">
       <UniqueIdentifier>{684183e6-3d19-4893-bf69-a7ccbe17a138}</UniqueIdentifier>
     </Filter>
@@ -33,6 +30,12 @@
     </Filter>
     <Filter Include="소스 파일\GameObject">
       <UniqueIdentifier>{9d4cf2bb-04bc-4bd7-8995-000d614b3b1b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\SpirV">
+      <UniqueIdentifier>{5e4fbde1-2719-439d-84ed-5180aa5e9a86}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Shader">
+      <UniqueIdentifier>{9e642f33-89c8-4ff4-ba87-310805dee6d0}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -81,6 +84,9 @@
     <ClInclude Include="define.h">
       <Filter>소스 파일\WinMain</Filter>
     </ClInclude>
+    <ClInclude Include="VmShader.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -107,6 +113,9 @@
     <ClCompile Include="VmGameObject.cpp">
       <Filter>소스 파일\GameObject</Filter>
     </ClCompile>
+    <ClCompile Include="VmShader.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="VmEngine.rc">
@@ -122,11 +131,17 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Shader\skeletalmesh.frag">
-      <Filter>소스 파일\Shader</Filter>
+    <None Include="SpirV\skeletalmesh.frag">
+      <Filter>소스 파일\SpirV</Filter>
     </None>
-    <None Include="Shader\skeletalmesh.vert">
-      <Filter>소스 파일\Shader</Filter>
+    <None Include="SpirV\skeletalmesh.vert">
+      <Filter>소스 파일\SpirV</Filter>
+    </None>
+    <None Include="SpirV\staticmesh.frag">
+      <Filter>소스 파일\SpirV</Filter>
+    </None>
+    <None Include="SpirV\staticmesh.vert">
+      <Filter>소스 파일\SpirV</Filter>
     </None>
   </ItemGroup>
 </Project>

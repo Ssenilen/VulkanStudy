@@ -54,12 +54,12 @@ void VmFramework::VmInitialize(HINSTANCE hInstance, HWND hWnd, const int nWindow
 	/// 모델 생성
 	m_pCubeTexture = new Texture(m_vkDevice, m_vkCommandBuffer, m_vkPhysicalDeviceMemoryProperites, "castle_guard.png");
 	m_Texture = m_pCubeTexture->GetTextureObject();
-	m_pFbxModel = new FBXModel("cg_dance2.fbx");
+	m_pFbxModel = new FBXModel("cube.fbx");
 	InitBoneUniformBuffer();
 	///
 	InitUniformBuffer();
-	InitDescriptorSetAndPipelineLayout(USING_TEXTURE);
 	InitRenderPass(depthPresent);
+	InitDescriptorSetAndPipelineLayout(USING_TEXTURE);
 	InitShaders();
 	InitFrameBuffer(depthPresent);
 
@@ -70,7 +70,6 @@ void VmFramework::VmInitialize(HINSTANCE hInstance, HWND hWnd, const int nWindow
 
 
 	InitDescriptorSet(USING_TEXTURE);
-	InitPipelineCache();
 	InitPipeline(depthPresent);
 }
 
@@ -1105,35 +1104,6 @@ void VmFramework::InitRenderPass(bool include_depth)
 
 	result = vkCreateRenderPass(m_vkDevice, &rp_info, nullptr, &m_Render_Pass);
 	assert(result == VK_SUCCESS);
-
-
-
-	/* Vertex Buffer 부분 생성하며 중복 코드가 있어 주석 처리
-	VkSemaphoreCreateInfo imageAcquiredSemaphoreCreateInfo;
-	imageAcquiredSemaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-	imageAcquiredSemaphoreCreateInfo.pNext = nullptr;
-	imageAcquiredSemaphoreCreateInfo.flags = 0;
-
-	result = vkCreateSemaphore(m_vkDevice, &imageAcquiredSemaphoreCreateInfo, nullptr, &m_ImageAcquiredSemaphore);
-	assert(result == VK_SUCCESS);
-
-	// 렌더 패스는 두 가지의 attachment가 존재한다. (색상 & 깊이)
-	
-	// 레이아웃 설정을 위해 Swapchain 이미지를 획득한다.
-	result = vkAcquireNextImageKHR(m_vkDevice, m_vkSwapchain, UINT64_MAX,
-		m_ImageAcquiredSemaphore, VK_NULL_HANDLE, &m_nCurrent_Buffer);
-	assert(result >= 0);
-	*/
-
-	// The initial layout for the color and depth attachments will be
-	// LAYOUT_UNDEFINED because at the start of the renderpass, we don't
-	// care about their contents. At the start of the subpass, the color
-	// attachment's layout will be transitioned to LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-	// and the depth stencil attachment's layout will be transitioned to
-	// LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL.  At the end of the renderpass,
-	// the color attachment's layout will be transitioned to
-	// LAYOUT_PRESENT_SRC_KHR to be ready to present.  This is all done as part
-	// of the renderpass, no barriers are necessary.
 }
 
 void VmFramework::InitShaders()
@@ -1151,7 +1121,7 @@ void VmFramework::InitShaders()
 	m_ShaderStages[0].pName = "main";
 
 	size_t size = 0;
-	void* vertShaderCode = read_spv("Shader/skeletalmesh_vert.spv", &size);
+	void* vertShaderCode = read_spv("SpirV/staticmesh_vert.spv", &size);
 
 	moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	moduleCreateInfo.pNext = nullptr;
@@ -1171,7 +1141,7 @@ void VmFramework::InitShaders()
 	m_ShaderStages[1].pName = "main";
 
 	size = 0;
-	void* fragShaderCode = read_spv("Shader/skeletalmesh_frag.spv", &size);
+	void* fragShaderCode = read_spv("SpirV/staticmesh_frag.spv", &size);
 
 	moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	moduleCreateInfo.pNext = nullptr;
@@ -1338,23 +1308,19 @@ void VmFramework::InitIndexBuffer()
 	assert(result == VK_SUCCESS);
 }
 
-void VmFramework::InitPipelineCache()
-{
-	VkResult result;
-
-	VkPipelineCacheCreateInfo pipelineCache;
-	pipelineCache.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-	pipelineCache.pNext = nullptr;
-	pipelineCache.initialDataSize = 0;
-	pipelineCache.pInitialData = nullptr;
-	pipelineCache.flags = 0;
-	result = vkCreatePipelineCache(m_vkDevice, &pipelineCache, nullptr, &m_vkPipeline_Cache);
-	assert(result == VK_SUCCESS);
-}
-
 void VmFramework::InitPipeline(bool include_depth, bool include_vi)
 {
 	VkResult result;
+
+	VkPipelineCache pipelineCache;
+	VkPipelineCacheCreateInfo pipelineCache_ci;
+	pipelineCache_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+	pipelineCache_ci.pNext = nullptr;
+	pipelineCache_ci.initialDataSize = 0;
+	pipelineCache_ci.pInitialData = nullptr;
+	pipelineCache_ci.flags = 0;
+	result = vkCreatePipelineCache(m_vkDevice, &pipelineCache_ci, nullptr, &pipelineCache);
+	assert(result == VK_SUCCESS);
 
 	// Dynamic Pipeline State는 Command Buffer의 실행 중 명령에 의해 변경될 수 있는 상태를 말한다.
 	// 여기선 모두 비활성화 한 상태로 시작한다.
@@ -1487,7 +1453,7 @@ void VmFramework::InitPipeline(bool include_depth, bool include_vi)
 	pipeline.renderPass = m_Render_Pass;
 	pipeline.subpass = 0;
 
-	result = vkCreateGraphicsPipelines(m_vkDevice, m_vkPipeline_Cache, 1, &pipeline, nullptr, &m_vkPipeline);
+	result = vkCreateGraphicsPipelines(m_vkDevice, pipelineCache, 1, &pipeline, nullptr, &m_vkPipeline);
 	assert(result == VK_SUCCESS); /// ShaderStage ㅡㅡ
 }
 
@@ -1511,32 +1477,10 @@ void VmFramework::Init_Scissors()
 	vkCmdSetScissor(m_vkCommandBuffer, 0, NUM_SCISSORS, &m_vkScissor);
 }
 
-void VmFramework::UpdateDataBuffer()
+void VmFramework::UpdateDataBuffer(int cubeNum = 0)
 {
 	VkResult result;
 	uint8_t *pData;
-	
-	vkWaitForFences(m_vkDevice, 1, &m_vkDrawFence[m_nCurrent_Buffer], VK_TRUE, UINT64_MAX);
-	vkResetFences(m_vkDevice, 1, &m_vkDrawFence[m_nCurrent_Buffer]);
-
-	result = vkAcquireNextImageKHR(m_vkDevice, m_vkSwapchain, UINT64_MAX, m_vkImageAcquiredSemaphores[m_nCurrent_Buffer], m_vkDrawFence[m_nCurrent_Buffer], &m_nCurrent_Buffer);
-
-
-
-	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-		// demo->swapchain is out of date (e.g. the window was resized) and
-		// must be recreated:
-		// demo_resize(demo);
-		// TODO: resize 처리 만들어야 함.
-	}
-	else if (result == VK_SUBOPTIMAL_KHR) {
-		// demo->swapchain is not as optimal as it could be, but the platform's
-		// presentation engine will still present the image correctly.
-	}
-	else {
-		assert(result == VK_SUCCESS);
-	}
-
 
 	/// ---임시임시임시임시--- 나중에 카메라기능 따로 뺍시다 ---임시임시임시임시---
 	/// ---임시임시임시임시--- 나중에 카메라기능 따로 뺍시다 ---임시임시임시임시---
@@ -1549,6 +1493,8 @@ void VmFramework::UpdateDataBuffer()
 	glm::mat4 mtxProjection = glm::perspective(fov, static_cast<float>(m_nWindowWidth) / static_cast<float>(m_nWindowHeight), 0.1f, 100.0f);
 
 	glm::mat4 m_mtxModel = glm::mat4(1.0f);
+	m_mtxModel[3][0] = 50.0f * cubeNum;
+
 	// Vulkan clip space has inverted Y and half Z.
 	glm::mat4 mtxClip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
 		0.0f, -1.0f, 0.0f, 0.0f,
@@ -1579,13 +1525,42 @@ void VmFramework::UpdateDataBuffer()
 
 	vkUnmapMemory(m_vkDevice, m_UniformData.mem);
 
+	result = vkBindBufferMemory(m_vkDevice, m_UniformData.buf, m_UniformData.mem, 0);
+	assert(result == VK_SUCCESS);
+	
+	// 왜일까?
+	vkCmdUpdateBuffer(m_vkCommandBuffer, m_UniformData.buf, 0, mem_reqs.size, pData);
+
 	// m_BoneUniform
 	vkGetBufferMemoryRequirements(m_vkDevice, m_BoneUniformData.buf, &mem_reqs);
 	result = vkMapMemory(m_vkDevice, m_BoneUniformData.mem, 0, VK_WHOLE_SIZE, 0, (void**)&pData);
 	assert(result == VK_SUCCESS);
 	m_pFbxModel->GetBoneUniformData(pData);
 	vkUnmapMemory(m_vkDevice, m_BoneUniformData.mem);
+}
 
+void VmFramework::Present()
+{
+	VkResult result;
+
+	vkWaitForFences(m_vkDevice, 1, &m_vkDrawFence[m_nCurrent_Buffer], VK_TRUE, UINT64_MAX);
+	vkResetFences(m_vkDevice, 1, &m_vkDrawFence[m_nCurrent_Buffer]);
+
+	result = vkAcquireNextImageKHR(m_vkDevice, m_vkSwapchain, UINT64_MAX, m_vkImageAcquiredSemaphores[m_nCurrent_Buffer], m_vkDrawFence[m_nCurrent_Buffer], &m_nCurrent_Buffer);
+	
+	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+		// demo->swapchain is out of date (e.g. the window was resized) and
+		// must be recreated:
+		// demo_resize(demo);
+		// TODO: resize 처리 만들어야 함.
+	}
+	else if (result == VK_SUBOPTIMAL_KHR) {
+		// demo->swapchain is not as optimal as it could be, but the platform's
+		// presentation engine will still present the image correctly.
+	}
+	else {
+		assert(result == VK_SUCCESS);
+	}
 
 	VkPipelineStageFlags pipe_stage_flags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	VkSubmitInfo submit_info = {};
@@ -1639,7 +1614,7 @@ void VmFramework::Tick()
 	rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	rp_begin.pNext = nullptr;
 	rp_begin.renderPass = m_Render_Pass;
-	rp_begin.framebuffer = m_pFrameBuffers[m_nCurrent_Buffer]; 
+	rp_begin.framebuffer = m_pFrameBuffers[m_nCurrent_Buffer];
 	rp_begin.renderArea.offset.x = 0;
 	rp_begin.renderArea.offset.y = 0;
 	rp_begin.renderArea.extent.width = m_nWindowWidth;
@@ -1654,28 +1629,78 @@ void VmFramework::Tick()
 	cmd_buf_info.pInheritanceInfo = nullptr;
 
 	result = vkBeginCommandBuffer(m_vkCommandBuffer, &cmd_buf_info);
-	assert(result == VK_SUCCESS);
-	vkCmdBeginRenderPass(m_vkCommandBuffer, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
-	vkCmdBindPipeline(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline);
-	vkCmdBindDescriptorSets(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline_Layout, 0, NUM_DESCRIPTOR_SETS, m_vDesc_Set.data(), 0, nullptr);
 
-	const VkDeviceSize offsets[1] = { 0 };
-	vkCmdBindVertexBuffers(m_vkCommandBuffer, 0, 1, &vertex_buffer.buf, offsets);
-	vkCmdBindIndexBuffer(m_vkCommandBuffer, index_buffer.buf, 0, VK_INDEX_TYPE_UINT16);
 	Init_Viewports();
 	Init_Scissors();
+	vkCmdBeginRenderPass(m_vkCommandBuffer, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
 
-	//vkCmdDraw(m_vkCommandBuffer, 12 * 3, 1, 0, 0);
-	vkCmdDrawIndexed(m_vkCommandBuffer, m_pFbxModel->GetIndices(), 1, 0, 0, 0);
+	for (int i = -1; i < 2; i++)
+	{
+		const VkDeviceSize offsets[1] = { 0 };
+		vkCmdBindVertexBuffers(m_vkCommandBuffer, 0, 1, &vertex_buffer.buf, offsets);
+		vkCmdBindIndexBuffer(m_vkCommandBuffer, index_buffer.buf, 0, VK_INDEX_TYPE_UINT16);
+		{
+			// 디스크립터 셋 업데이트
+			VkWriteDescriptorSet writes[3];
+
+			writes[0] = {};
+			writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			writes[0].pNext = nullptr;
+			writes[0].dstSet = m_vDesc_Set[0];
+			writes[0].descriptorCount = 1;
+			writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			writes[0].pBufferInfo = &m_UniformData.buffer_info;
+			writes[0].dstArrayElement = 0;
+			writes[0].dstBinding = 0;
+
+
+			writes[1] = {};
+			writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			writes[1].pNext = nullptr;
+			writes[1].dstSet = m_vDesc_Set[0];
+			writes[1].descriptorCount = 1;
+			writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			writes[1].pBufferInfo = &m_BoneUniformData.buffer_info;
+			writes[1].dstArrayElement = 0;
+			writes[1].dstBinding = 1;
+
+			VkDescriptorImageInfo tex_descs[TEXTURE_COUNT];
+			memset(&tex_descs, 0, sizeof(tex_descs));
+			for (unsigned int i = 0; i < TEXTURE_COUNT; i++)
+			{
+				tex_descs[i].sampler = m_Texture.sampler;
+				tex_descs[i].imageView = m_Texture.view;
+				tex_descs[i].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+			}
+
+			writes[2] = {};
+			writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			writes[2].dstSet = m_vDesc_Set[0];
+			writes[2].dstBinding = 2;
+			writes[2].descriptorCount = 1;
+			writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			writes[2].pImageInfo = tex_descs;
+			writes[2].dstArrayElement = 0;
+
+			// Cube.c 2227 Line
+			vkUpdateDescriptorSets(m_vkDevice, 3, writes, 0, nullptr);
+		}
+
+		vkCmdBindPipeline(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline);
+		vkCmdBindDescriptorSets(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline_Layout, 0, NUM_DESCRIPTOR_SETS, m_vDesc_Set.data(), 0, nullptr);
+
+		UpdateDataBuffer(i);
+
+		//vkCmdDraw(m_vkCommandBuffer, 12 * 3, 1, 0, 0);
+		vkCmdDrawIndexed(m_vkCommandBuffer, m_pFbxModel->GetIndices(), 1, 0, 0, 0);
+	}
+
 	vkCmdEndRenderPass(m_vkCommandBuffer);
 
 	result = vkEndCommandBuffer(m_vkCommandBuffer);
 	assert(result == VK_SUCCESS);
-
-	const VkCommandBuffer cmd_bufs[] = { m_vkCommandBuffer };
-
-	UpdateDataBuffer();
-
+	
+	Present();
 	Sleep(1);
 }
 

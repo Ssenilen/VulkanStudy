@@ -169,6 +169,7 @@
     <ClInclude Include="VmFramework.h" />
     <ClInclude Include="VmGameObject.h" />
     <ClInclude Include="VmGameScene.h" />
+    <ClInclude Include="VmShader.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Common.cxx" />
@@ -184,6 +185,7 @@
     <ClCompile Include="VmFramework.cpp" />
     <ClCompile Include="VmGameObject.cpp" />
     <ClCompile Include="VmGameScene.cpp" />
+    <ClCompile Include="VmShader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="VmEngine.rc" />
@@ -193,10 +195,16 @@
     <Image Include="VmEngine.ico" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Shader\skeletalmesh.frag">
+    <None Include="SpirV\skeletalmesh.frag">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </None>
-    <None Include="Shader\skeletalmesh.vert">
+    <None Include="SpirV\skeletalmesh.vert">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="SpirV\staticmesh.frag">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="SpirV\staticmesh.vert">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </None>
   </ItemGroup>

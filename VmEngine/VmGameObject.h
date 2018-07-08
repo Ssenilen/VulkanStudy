@@ -1,12 +1,13 @@
 #pragma once
 
 class FBXModel;
+class VmShader;
 
 // Base로 일단 단색큐브 그릴 수 있게 만들자.
 class VmGameObject
 {
 public:
-	VmGameObject();
+	explicit VmGameObject(FBXModel* pMesh);
 	~VmGameObject();
 
 	virtual void Tick();
@@ -14,5 +15,6 @@ public:
 
 private:
 	FBXModel* m_pMesh;
+	VmShader* m_pShader;
 };
 

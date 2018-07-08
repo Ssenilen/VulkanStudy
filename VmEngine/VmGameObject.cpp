@@ -1,11 +1,13 @@
 #include "stdafx.h"
 #include "FBXModel.h"
+#include "VmShader.h"
 #include "VmGameObject.h"
 
-
-VmGameObject::VmGameObject() : m_pMesh(nullptr)
+VmGameObject::VmGameObject(FBXModel* pMesh) :
+	m_pMesh(pMesh),
+	m_pShader(nullptr)
 {
-	m_pMesh = new FBXModel("cube.fbx");
+	m_pShader = new VmShader();
 }
 
 
