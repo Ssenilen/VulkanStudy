@@ -28,14 +28,11 @@ typedef struct {
 	VkDescriptorPool vkDescriptorPool;
 	VkDescriptorSetLayout vkDescriptorSetLayout;
 	VkDescriptorSet vkDescriptorSet;
+	VkPhysicalDeviceMemoryProperties vkPhysicalDeviceMemoryProperties;
 } VkDeviceManager;
 
 typedef struct {
 	Matrix4		mtxView;
 	Matrix4		mtxProjection;
 	Matrix4		mtxClip;
-	float		fov;
-	float		fCameraPosX;
-	float		fCameraPosY;
-	float		fCameraPosZ;
 } MatrixManager;

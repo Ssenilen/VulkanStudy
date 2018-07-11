@@ -3,7 +3,8 @@
 
 VmBuffer::VmBuffer(VkDevice vkDevice, VkPhysicalDeviceMemoryProperties vkPhysicalDeviceMemoryProperties) :
 	m_vkDevice(vkDevice), m_vkBuffer(VK_NULL_HANDLE), m_vkDeviceMemory(VK_NULL_HANDLE),
-	m_vkSize(0), m_vkAlignment(0), m_pMapped(nullptr), m_vkDescriptorBufferInfo({})
+	m_vkSize(0), m_vkAlignment(0), m_pMapped(nullptr), m_vkDescriptorBufferInfo({}),
+	m_vkPhysicalDeviceMemoryProperites(vkPhysicalDeviceMemoryProperties)
 {
 }
 
@@ -33,6 +34,7 @@ VkResult VmBuffer::CreateBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyF
 	alloc_info.allocationSize = mem_reqs.size;
 	bool bPass = memory_type_from_properties(mem_reqs.memoryTypeBits, memoryPropertyFlags, &alloc_info.memoryTypeIndex);
 	assert(bPass && "No mappable, coherent memory");
+	vkAllocateMemory(m_vkDevice, &alloc_info, nullptr, &m_vkDeviceMemory);
 
 	m_vkAlignment = mem_reqs.alignment;
 	m_vkSize = alloc_info.allocationSize;
@@ -73,11 +75,13 @@ VkResult VmBuffer::Bind(VkDeviceSize offset)
 	return vkBindBufferMemory(m_vkDevice, m_vkBuffer, m_vkDeviceMemory, offset);
 }
 
-void VmBuffer::SetupDescriptor(VkDeviceSize size, VkDeviceSize offset)
+VkDescriptorBufferInfo VmBuffer::SetupDescriptor(VkDeviceSize size, VkDeviceSize offset)
 {
 	m_vkDescriptorBufferInfo.offset = offset;
 	m_vkDescriptorBufferInfo.buffer = m_vkBuffer;
 	m_vkDescriptorBufferInfo.range = size;
+
+	return m_vkDescriptorBufferInfo;
 }
 
 bool VmBuffer::memory_type_from_properties(uint32_t typeBits, VkFlags requirements_mask, uint32_t *typeIndex)

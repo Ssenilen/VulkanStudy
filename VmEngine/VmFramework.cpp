@@ -61,31 +61,42 @@ void VmFramework::VmInitialize(HINSTANCE hInstance, HWND hWnd, TCHAR* pWindowTit
 	g_GameTimer.Start();
 
 	/// 모델 생성
-	m_pCubeTexture = new Texture(m_vkDeviceManager.vkDevice, m_vkCommandBuffer, m_vkPhysicalDeviceMemoryProperites, "blue.png");
+	m_pCubeTexture = new Texture(m_vkDeviceManager.vkDevice, m_vkCommandBuffer, m_vkDeviceManager.vkPhysicalDeviceMemoryProperties, "blue.png");
 	m_Texture = m_pCubeTexture->GetTextureObject();
 	m_pFbxModel = new FBXModel("cube.fbx");
 	InitBoneUniformBuffer();
 	///
 
 	/// 새롭게 모델 생성하는 부분
-	m_pGameObject.push_back(new VmGameObject(&m_vkDeviceManager, m_pFbxModel, &m_Texture));
+	for(int i = -10 ; i < 11; ++i)
+		for (int j = -11; j < 11; ++j)
+		{
+			VmGameObject* pGameObject = new VmGameObject(&m_vkDeviceManager, m_pFbxModel, &m_Texture);
+			pGameObject->SetPosition(i * 25.0f, j * 25.0f, 0.0f);
+			m_pGameObject.push_back(pGameObject);
+		}
 
 	///
 
-	InitUniformBuffer();
+	//InitUniformBuffer();
 	InitRenderPass(depthPresent);
-	InitDescriptorSetAndPipelineLayout(USING_TEXTURE);
-	InitShaders();
 	InitFrameBuffer(depthPresent);
+	InitShaders();
 
-	
+	// 파이프라인 준비
 	InitVertexBuffer(USING_TEXTURE);
 	InitIndexBuffer();
-	InitDescriptorPool(USING_TEXTURE);
-
-
-	InitDescriptorSet(USING_TEXTURE);
+	SetupDescriptorSetLayout(USING_TEXTURE);
 	InitPipeline(depthPresent);
+	InitDescriptorPool(USING_TEXTURE);
+	//InitDescriptorSet(USING_TEXTURE);
+
+	for (int i = 0; i < m_pGameObject.size(); ++i)
+	{
+		m_pGameObject[i]->SetDescriptorSet();
+		m_pGameObject[i]->UpdateUniformBuffer(nullptr);
+	}
+
 
 	g_GameTimer.Start();
 }
@@ -307,7 +318,7 @@ void VmFramework::InitVKSwapChain()
 	}
 
 	// Get Memory information and properties
-	vkGetPhysicalDeviceMemoryProperties(m_vkPhysicalDevice, &m_vkPhysicalDeviceMemoryProperites);
+	vkGetPhysicalDeviceMemoryProperties(m_vkPhysicalDevice, &m_vkDeviceManager.vkPhysicalDeviceMemoryProperties);
 }
 
 VkResult VmFramework::InitDevice()
@@ -730,12 +741,12 @@ void VmFramework::CreateDepthBuffer()
 
 bool VmFramework::memory_type_from_properties(uint32_t typeBits, VkFlags requirements_mask, uint32_t *typeIndex)
 {
-	for (uint32_t i = 0; i < m_vkPhysicalDeviceMemoryProperites.memoryTypeCount; i++)
+	for (uint32_t i = 0; i < m_vkDeviceManager.vkPhysicalDeviceMemoryProperties.memoryTypeCount; i++)
 	{
 		if ((typeBits & 1) == 1)
 		{
 			// 사용할 수 있는 타입인지, 사용자 속성과 일치하는지
-			if ((m_vkPhysicalDeviceMemoryProperites.memoryTypes[i].propertyFlags & requirements_mask) == requirements_mask)
+			if ((m_vkDeviceManager.vkPhysicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & requirements_mask) == requirements_mask)
 			{
 				*typeIndex = i;
 				return true;
@@ -910,7 +921,7 @@ void VmFramework::InitBoneUniformBuffer()
 	m_BoneUniformData.buffer_info.range = sizeof(mtxSize) * 96;
 }
 
-void VmFramework::InitDescriptorSetAndPipelineLayout(bool use_texture)
+void VmFramework::SetupDescriptorSetLayout(bool use_texture)
 {
 	VkDescriptorSetLayoutBinding layout_bindings[3];
 	layout_bindings[0].binding = 0;
@@ -965,92 +976,93 @@ void VmFramework::InitDescriptorPool(bool use_texture)
 	// Uniform Buffer가 Init되고, DerscriptorAndPipelineLayouts 함수가 호출된 이후에 시행되어야 한다.
 	VkResult result;
 
-	VkDescriptorPoolSize type_count[3];
-	type_count[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	type_count[0].descriptorCount = 1;
-	type_count[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	type_count[1].descriptorCount = 1;
+	uint32_t nObjectCount = m_pGameObject.size();
+	std::vector<VkDescriptorPoolSize> type_count;
+	// Camera Uniform Buffer
+	type_count.push_back(VkDescriptorPoolSize{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nObjectCount });
+	// Bone Uniform Buffer
+	type_count.push_back(VkDescriptorPoolSize{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, nObjectCount });
 	if (use_texture) 
 	{
-		type_count[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		type_count[2].descriptorCount = 1;
+		// Texture Image Sampler
+		type_count.push_back(VkDescriptorPoolSize{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, nObjectCount });
 	}
 
 	VkDescriptorPoolCreateInfo descriptor_pool = {};
 	descriptor_pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	descriptor_pool.pNext = nullptr;
-	descriptor_pool.maxSets = 1;
-	descriptor_pool.poolSizeCount = use_texture ? 3 : 2;
-	descriptor_pool.pPoolSizes = type_count;
+	descriptor_pool.maxSets = nObjectCount;
+	descriptor_pool.poolSizeCount = type_count.size();
+	descriptor_pool.pPoolSizes = type_count.data();
 
 	result = vkCreateDescriptorPool(m_vkDeviceManager.vkDevice, &descriptor_pool, nullptr, &m_vkDeviceManager.vkDescriptorPool);
 	assert(result == VK_SUCCESS);
 }
 
-void VmFramework::InitDescriptorSet(bool use_texture)
-{
-	VkResult result;
-	
-	// 앞서 호출한 InitDescriptorPool을 이용해 DiscriptorPool을 생성하고 나면,
-	// Pool에서 Descriptor를 할당할 수 있게 된다.
-	VkDescriptorSetAllocateInfo alloc_info[1];
-	alloc_info[0].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	alloc_info[0].pNext = nullptr;
-	alloc_info[0].descriptorPool = m_vkDeviceManager.vkDescriptorPool;
-	alloc_info[0].descriptorSetCount = 1;
-	alloc_info[0].pSetLayouts = &m_vkDeviceManager.vkDescriptorSetLayout;
-	
-	result = vkAllocateDescriptorSets(m_vkDeviceManager.vkDevice, alloc_info, &m_vkDescriptorSet);
-	assert(result == VK_SUCCESS);
-
-	// 디스크립터 셋 업데이트
-	VkWriteDescriptorSet writes[3];
-
-	writes[0] = {};
-	writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	writes[0].pNext = nullptr;
-	writes[0].dstSet = m_vkDescriptorSet;
-	writes[0].descriptorCount = 1;
-	writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	writes[0].pBufferInfo = &m_UniformData.buffer_info;
-	writes[0].dstArrayElement = 0;
-	writes[0].dstBinding = 0;
-
-
-	writes[1] = {};
-	writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	writes[1].pNext = nullptr;
-	writes[1].dstSet = m_vkDescriptorSet;
-	writes[1].descriptorCount = 1;
-	writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	writes[1].pBufferInfo = &m_BoneUniformData.buffer_info;
-	writes[1].dstArrayElement = 0;
-	writes[1].dstBinding = 1;
-
-	if (use_texture)
-	{
-		VkDescriptorImageInfo tex_descs[TEXTURE_COUNT];
-		memset(&tex_descs, 0, sizeof(tex_descs));
-		for (unsigned int i = 0; i < TEXTURE_COUNT; i++)
-		{
-			tex_descs[i].sampler = m_Texture.sampler;
-			tex_descs[i].imageView = m_Texture.view;
-			tex_descs[i].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-		}
-
-		writes[2] = {};
-		writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writes[2].dstSet = m_vkDescriptorSet;
-		writes[2].dstBinding = 2;
-		writes[2].descriptorCount = 1;
-		writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		writes[2].pImageInfo = tex_descs;
-		writes[2].dstArrayElement = 0;
-	}
-
-	// Cube.c 2227 Line
-	vkUpdateDescriptorSets(m_vkDeviceManager.vkDevice, use_texture ? 3 : 2, writes, 0, nullptr);
- }
+//void VmFramework::InitDescriptorSet(bool use_texture)
+//{
+//	VkResult result;
+//	
+//	// 앞서 호출한 InitDescriptorPool을 이용해 DiscriptorPool을 생성하고 나면,
+//	// Pool에서 Descriptor를 할당할 수 있게 된다.
+//	VkDescriptorSetAllocateInfo alloc_info[1];
+//	alloc_info[0].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+//	alloc_info[0].pNext = nullptr;
+//	alloc_info[0].descriptorPool = m_vkDeviceManager.vkDescriptorPool;
+//	alloc_info[0].descriptorSetCount = 1;
+//	alloc_info[0].pSetLayouts = &m_vkDeviceManager.vkDescriptorSetLayout;
+//	
+//	result = vkAllocateDescriptorSets(m_vkDeviceManager.vkDevice, alloc_info, &m_vkDescriptorSet);
+//	assert(result == VK_SUCCESS);
+//
+//	// 디스크립터 셋 업데이트
+//	VkWriteDescriptorSet writes[3];
+//
+//	writes[0] = {};
+//	writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+//	writes[0].pNext = nullptr;
+//	writes[0].dstSet = m_vkDescriptorSet;
+//	writes[0].descriptorCount = 1;
+//	writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+//	writes[0].pBufferInfo = &m_UniformData.buffer_info;
+//	writes[0].dstArrayElement = 0;
+//	writes[0].dstBinding = 0;
+//
+//
+//	writes[1] = {};
+//	writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+//	writes[1].pNext = nullptr;
+//	writes[1].dstSet = m_vkDescriptorSet;
+//	writes[1].descriptorCount = 1;
+//	writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+//	writes[1].pBufferInfo = &m_BoneUniformData.buffer_info;
+//	writes[1].dstArrayElement = 0;
+//	writes[1].dstBinding = 1;
+//
+//	if (use_texture)
+//	{
+//		VkDescriptorImageInfo tex_descs[TEXTURE_COUNT];
+//		memset(&tex_descs, 0, sizeof(tex_descs));
+//		for (unsigned int i = 0; i < TEXTURE_COUNT; i++)
+//		{
+//			tex_descs[i].sampler = m_Texture.sampler;
+//			tex_descs[i].imageView = m_Texture.view;
+//			tex_descs[i].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+//		}
+//
+//		writes[2] = {};
+//		writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+//		writes[2].dstSet = m_vkDescriptorSet;
+//		writes[2].dstBinding = 2;
+//		writes[2].descriptorCount = 1;
+//		writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+//		writes[2].pImageInfo = tex_descs;
+//		writes[2].dstArrayElement = 0;
+//	}
+//
+//	// Cube.c 2227 Line
+//	vkUpdateDescriptorSets(m_vkDeviceManager.vkDevice, use_texture ? 3 : 2, writes, 0, nullptr);
+// }
 
 void VmFramework::InitRenderPass(bool include_depth)
 {
@@ -1259,7 +1271,7 @@ void VmFramework::InitVertexBuffer(bool use_texture)
 	m_VIAttribs[2].binding = 0;
 	m_VIAttribs[2].location = 2;
 	m_VIAttribs[2].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	m_VIAttribs[2].offset = m_VIAttribs[1].offset + 16;
+	m_VIAttribs[2].offset = m_VIAttribs[1].offset + 8;
 	// BoneWeights
 	m_VIAttribs[3].binding = 0;
 	m_VIAttribs[3].location = 3;
@@ -1645,24 +1657,45 @@ void VmFramework::Tick()
 	vkCmdBeginRenderPass(m_vkCommandBuffer, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
 	SetViewports();	
 	SetScissors();
-	vkCmdBindDescriptorSets(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline_Layout, 0, 1, &m_vkDescriptorSet, 0, nullptr);
 
-	for (int i = -50; i < 50; i++)
+	/// 이부분은 객체가 여러 종류가 생길 때, 각각 세팅해줄 수 있도록 추후에 고려하자.
+	const VkDeviceSize offsets[1] = { 0 };
+
+
+	float fov = glm::radians(45.0f);
+	m_MatrixManager.mtxProjection = glm::perspective(fov, static_cast<float>(m_nWindowWidth) / static_cast<float>(m_nWindowHeight), 0.1f, 100.0f);
+	m_MatrixManager.mtxView = glm::lookAt(glm::vec3(m_fCameraPosX, m_fCameraPosY, m_fCameraPosZ),
+		glm::vec3(0.0f, 0.0f, 0.0f),
+		glm::vec3(0.0f, 1.0f, 0.0f));
+	// Vulkan clip space has inverted Y and half Z.
+	m_MatrixManager.mtxClip = Matrix4(1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, -1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 0.5f, 0.5f,
+		0.0f, 0.0f, 0.0f, 1.0f);
+
+	for (int i = 0; i < m_pGameObject.size(); ++i)
 	{
-		for (int j = -50; j < 50; j++)
-		{
-			const VkDeviceSize offsets[1] = { 0 };
+		{ // Pre Draw Setting
+			vkCmdBindDescriptorSets(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline_Layout, 0, 1, m_pGameObject[i]->GetDescriptorSet(), 0, nullptr);
+			vkCmdBindVertexBuffers(m_vkCommandBuffer, 0, 1, &vertex_buffer.buf, offsets);
+			vkCmdBindIndexBuffer(m_vkCommandBuffer, index_buffer.buf, 0, VK_INDEX_TYPE_UINT16);
 			vkCmdBindPipeline(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline);
-			//vkCmdBindVertexBuffers(m_vkCommandBuffer, 0, 1, &vertex_buffer.buf, offsets);
-			//vkCmdBindIndexBuffer(m_vkCommandBuffer, index_buffer.buf, 0, VK_INDEX_TYPE_UINT16);
-
-
-			//UpdateDataBuffer(i, j);
-
-			//vkCmdDraw(m_vkCommandBuffer, 12 * 3, 1, 0, 0);
-			//vkCmdDrawIndexed(m_vkCommandBuffer, m_pFbxModel->GetIndices(), 1, 0, 0, 0);
 		}
+		//m_pGameObject[i]->SetDescriptorSet();
+		m_pGameObject[i]->UpdateUniformBuffer(&m_MatrixManager);
+		vkCmdDrawIndexed(m_vkCommandBuffer, m_pFbxModel->GetIndices(), 1, 0, 0, 0);
 	}
+
+	//for (int i = 0; i < 1; i++)
+	//{
+	//	for (int j = 0; j < 1; j++)
+	//	{
+	//		UpdateDataBuffer(i, j);
+
+	//		vkCmdDraw(m_vkCommandBuffer, 12 * 3, 1, 0, 0);
+	//		vkCmdDrawIndexed(m_vkCommandBuffer, m_pFbxModel->GetIndices(), 1, 0, 0, 0);
+	//	}
+	//}
 
 	vkCmdEndRenderPass(m_vkCommandBuffer);
 

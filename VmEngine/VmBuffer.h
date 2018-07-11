@@ -21,7 +21,9 @@ public:
 	VkResult Map(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
 	void Unmap();
 	VkResult VmBuffer::Bind(VkDeviceSize offset = 0);
-	void SetupDescriptor(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
+	VkDescriptorBufferInfo SetupDescriptor(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
+	void* GetMappedMemory() { return m_pMapped; }
+
 
 	bool memory_type_from_properties(uint32_t typeBits, VkFlags requirements_mask, uint32_t *typeIndex);
 };

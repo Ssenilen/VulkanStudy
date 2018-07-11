@@ -2,13 +2,17 @@
 #include "Texture.h"
 #include "FBXModel.h"
 #include "VmShader.h"
+#include "VmBuffer.h"
 #include "VmGameObject.h"
 
 VmGameObject::VmGameObject(VkDeviceManager* pvkDeviceManager, FBXModel* pMesh, texture_object* pTexture) :
 	m_pMesh(pMesh),
-	m_pTexture(pTexture)
+	m_pTexture(pTexture),
+	m_pDeviceManager(pvkDeviceManager)
 {
-	//SetDescriptorSet(pvkDeviceManager);
+	m_pUniformBuffer = new VmBuffer(m_pDeviceManager->vkDevice, m_pDeviceManager->vkPhysicalDeviceMemoryProperties);
+	CreateUniformBuffer();
+	m_mtxModel = Matrix4(1.0f);
 }
 
 
@@ -37,9 +41,12 @@ void VmGameObject::SetPosition(float x, float y, float z)
 
 void VmGameObject::CreateUniformBuffer()
 {
+	m_pUniformBuffer->CreateBuffer(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, sizeof(Matrix4));
+	m_vkDescriptorBufferInfo = m_pUniformBuffer->SetupDescriptor(sizeof(Matrix4));
+	m_pUniformBuffer->Bind();
 }
 
-void VmGameObject::SetDescriptorSet(VkDeviceManager* pvkDeviceManager)
+void VmGameObject::SetDescriptorSet()
 {
 	VkResult result;
 
@@ -48,11 +55,11 @@ void VmGameObject::SetDescriptorSet(VkDeviceManager* pvkDeviceManager)
 	VkDescriptorSetAllocateInfo alloc_info[1];
 	alloc_info[0].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	alloc_info[0].pNext = nullptr;
-	alloc_info[0].descriptorPool = pvkDeviceManager->vkDescriptorPool;
+	alloc_info[0].descriptorPool = m_pDeviceManager->vkDescriptorPool;
 	alloc_info[0].descriptorSetCount = 1;
-	alloc_info[0].pSetLayouts = &pvkDeviceManager->vkDescriptorSetLayout;
+	alloc_info[0].pSetLayouts = &m_pDeviceManager->vkDescriptorSetLayout;
 
-	result = vkAllocateDescriptorSets(pvkDeviceManager->vkDevice, alloc_info, &m_vkDescriptorSet);
+	result = vkAllocateDescriptorSets(m_pDeviceManager->vkDevice, alloc_info, &m_vkDescriptorSet);
 	assert(result == VK_SUCCESS);
 
 	// 디스크립터 셋 업데이트
@@ -64,10 +71,22 @@ void VmGameObject::SetDescriptorSet(VkDeviceManager* pvkDeviceManager)
 	writes[0].dstSet = m_vkDescriptorSet;
 	writes[0].descriptorCount = 1;
 	writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	writes[0].pBufferInfo = &m_UniformData.buffer_info;
+	writes[0].pBufferInfo = &m_vkDescriptorBufferInfo;
 	writes[0].dstArrayElement = 0;
 	writes[0].dstBinding = 0;
 
+	/// 임시
+	writes[1] = {};
+	writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	writes[1].pNext = nullptr;
+	writes[1].dstSet = m_vkDescriptorSet;
+	writes[1].descriptorCount = 1;
+	writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	writes[1].pBufferInfo = &m_vkDescriptorBufferInfo;
+	writes[1].dstArrayElement = 0;
+	writes[1].dstBinding = 1;
+	/// 임시
+	
 	VkDescriptorImageInfo tex_descs[1];
 	memset(&tex_descs, 0, sizeof(tex_descs));
 	for (unsigned int i = 0; i < TEXTURE_COUNT; i++)
@@ -86,29 +105,45 @@ void VmGameObject::SetDescriptorSet(VkDeviceManager* pvkDeviceManager)
 	writes[2].pImageInfo = tex_descs;
 	writes[2].dstArrayElement = 0;
 
-	vkUpdateDescriptorSets(pvkDeviceManager->vkDevice, 3, writes, 0, nullptr);
+	vkUpdateDescriptorSets(m_pDeviceManager->vkDevice, 3, writes, 0, nullptr);
 }
 
-void VmGameObject::UpdateUniformBuffer(VkDeviceManager* pvkDeviceManager, uniform_data* pUniformBuffer, Matrix4& mtxProjection)
+void VmGameObject::UpdateUniformBuffer(MatrixManager* pMatrixManager)
 {
 	VkResult result;
+	if (pMatrixManager)
+	{	
 
-	float fov = glm::radians(45.0f);
-	Matrix4 mtxView = glm::lookAt(
-		Vector3(25.0f, 0.0f, 0.0f),	// CameraPos
-		Vector3(0.0f, 0.0f, 0.0f),	// View
-		Vector3(0.0f, 1.0f, 0.0f));	// Up Vector
+		Matrix4 mtxVp = pMatrixManager->mtxClip * pMatrixManager->mtxProjection * pMatrixManager->mtxView;
+		Matrix4 mtxMVP = mtxVp * m_mtxModel;
 
-	m_mtxModel = Matrix4(1.0f);
-	// Vulkan clip space has inverted Y and half Z.
-	Matrix4 mtxClip = Matrix4(1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, -1.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 0.5f, 0.5f,
-		0.0f, 0.0f, 0.0f, 1.0f);
+		result = m_pUniformBuffer->Map(sizeof(Matrix4), 0);
+		assert(result == VK_SUCCESS);
+		memcpy(m_pUniformBuffer->GetMappedMemory(), &mtxMVP, sizeof(mtxMVP));
+		m_pUniformBuffer->Unmap();
+	}
+}
 
-	Matrix4 mtxVp = mtxClip * mtxProjection * mtxView;
-	Matrix4 mtxMVP = mtxVp * m_mtxModel;
-	
-	uint8_t *pData = nullptr;
-	memcpy(pData, &mtxMVP, sizeof(mtxMVP));
+void VmGameObject::PreDrawSetting()
+{
+	// 객체로 쪼개질때 추가해줘야함
+	//vkCmdBindDescriptorSets(m_pDeviceManager->vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pDeviceManager->vkPipelineLayout, 0, 1, &m_vkDescriptorSet, 0, nullptr);
+}
+
+bool VmGameObject::memory_type_from_properties(uint32_t typeBits, VkFlags requirements_mask, uint32_t *typeIndex)
+{
+	for (uint32_t i = 0; i < m_pDeviceManager->vkPhysicalDeviceMemoryProperties.memoryTypeCount; i++)
+	{
+		if ((typeBits & 1) == 1)
+		{
+			// 사용할 수 있는 타입인지, 사용자 속성과 일치하는지
+			if ((m_pDeviceManager->vkPhysicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & requirements_mask) == requirements_mask)
+			{
+				*typeIndex = i;
+				return true;
+			}
+		}
+		typeBits >>= 1;
+	}
+	return false;
 }

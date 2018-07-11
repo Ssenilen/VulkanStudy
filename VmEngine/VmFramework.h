@@ -28,6 +28,7 @@ typedef struct {
 	VkImageView view;
 } depth;
 
+class VmBuffer;
 class VmGameObject;
 class VmFramework
 {
@@ -55,6 +56,7 @@ private:
 	void CalculateFrameStats();
 
 	VkDeviceManager m_vkDeviceManager;
+	MatrixManager m_MatrixManager;
 
 	uint32_t enabled_extension_count;
 	uint32_t enabled_layer_count;
@@ -75,16 +77,15 @@ private:
 	VkSemaphore m_vkImageAcquiredSemaphores[2];
 	VkSemaphore m_vkDrawCompleteSemaphores[2];
 	VkSemaphore m_vkLargeOwnershipSemaphores[2];
-	VkPhysicalDeviceMemoryProperties m_vkPhysicalDeviceMemoryProperites;
 	///
 
 	bool memory_type_from_properties(uint32_t typeBits, VkFlags requirements_mask, uint32_t *typeIndex);
 	void InitUniformBuffer();
 	void InitBoneUniformBuffer();
-	void InitDescriptorSetAndPipelineLayout(bool use_texture);
+	void SetupDescriptorSetLayout(bool use_texture);
 	void InitDescriptorPool(bool use_texture); 
 	/// FRAMEWORK에서 드러낼 부분
-	void InitDescriptorSet(bool use_texture);
+	//void InitDescriptorSet(bool use_texture);
 	/// FRAMEWORK에서 드러낼 부분
 	void InitRenderPass(bool include_depth);
 	void InitShaders();
@@ -125,7 +126,7 @@ private:
 	uniform_data m_UniformData;
 	uniform_data m_BoneUniformData;
 
-	VkDescriptorSet m_vkDescriptorSet;
+	//VkDescriptorSet m_vkDescriptorSet;
 
 	VkPipelineLayout m_vkPipeline_Layout;
 
