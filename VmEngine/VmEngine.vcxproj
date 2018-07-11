@@ -167,6 +167,7 @@
     <ClInclude Include="targetver.h" />
     <ClInclude Include="main.h" />
     <ClInclude Include="Texture.h" />
+    <ClInclude Include="VmBuffer.h" />
     <ClInclude Include="VmFramework.h" />
     <ClInclude Include="VmGameObject.h" />
     <ClInclude Include="VmGameScene.h" />
@@ -184,6 +185,7 @@
     </ClCompile>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Texture.cpp" />
+    <ClCompile Include="VmBuffer.cpp" />
     <ClCompile Include="VmFramework.cpp" />
     <ClCompile Include="VmGameObject.cpp" />
     <ClCompile Include="VmGameScene.cpp" />

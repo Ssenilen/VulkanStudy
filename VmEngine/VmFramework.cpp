@@ -1,7 +1,8 @@
 #include "stdafx.h"
 #include "VmTimer.h"
-#include "VmGameScene.h"
 #include "cube_data.h"
+#include "VmGameScene.h"
+#include "VmGameObject.h"
 #include "VmFramework.h"
 
 #define NUM_VIEWPORTS 1
@@ -17,7 +18,6 @@ VmFramework::VmFramework()
 	m_hInstance(0),
 	m_pWindowTitle(nullptr),
 	m_vkInstance(0),
-	m_vkDevice(0),
 	m_vkSurface(0),
 	m_vkSwapchain(0),
 	m_vkCommandBuffer(0),
@@ -61,11 +61,17 @@ void VmFramework::VmInitialize(HINSTANCE hInstance, HWND hWnd, TCHAR* pWindowTit
 	g_GameTimer.Start();
 
 	/// 모델 생성
-	m_pCubeTexture = new Texture(m_vkDevice, m_vkCommandBuffer, m_vkPhysicalDeviceMemoryProperites, "castle_guard.png");
+	m_pCubeTexture = new Texture(m_vkDeviceManager.vkDevice, m_vkCommandBuffer, m_vkPhysicalDeviceMemoryProperites, "blue.png");
 	m_Texture = m_pCubeTexture->GetTextureObject();
 	m_pFbxModel = new FBXModel("cube.fbx");
 	InitBoneUniformBuffer();
 	///
+
+	/// 새롭게 모델 생성하는 부분
+	m_pGameObject.push_back(new VmGameObject(&m_vkDeviceManager, m_pFbxModel, &m_Texture));
+
+	///
+
 	InitUniformBuffer();
 	InitRenderPass(depthPresent);
 	InitDescriptorSetAndPipelineLayout(USING_TEXTURE);
@@ -115,8 +121,6 @@ VkResult VmFramework::InitEnumerateDevice()
 	uint32_t gpu_count = 0;
 	VkResult result = vkEnumeratePhysicalDevices(m_vkInstance, &gpu_count, nullptr);
 	assert(result == VK_SUCCESS);
-
-//	m_vvkPhysicalDevices.resize(physicalDeviceCount);
 
 	if (gpu_count > 0)
 	{
@@ -241,14 +245,14 @@ void VmFramework::InitVKSwapChain()
 
 	InitDevice();
 
-	vkGetDeviceQueue(m_vkDevice, m_nGraphicQueueFamilyIndex, 0, &m_vkGraphicsQueue);
+	vkGetDeviceQueue(m_vkDeviceManager.vkDevice, m_nGraphicQueueFamilyIndex, 0, &m_vkGraphicsQueue);
 	if (!m_bSeparatePresentQueue)
 	{
 		m_vkPresentQueue = m_vkGraphicsQueue;
 	}
 	else
 	{
-		vkGetDeviceQueue(m_vkDevice, m_nPresentQueueFamilyIndex, 0, &m_vkPresentQueue);
+		vkGetDeviceQueue(m_vkDeviceManager.vkDevice, m_nPresentQueueFamilyIndex, 0, &m_vkPresentQueue);
 	}
 
 	// Get the list of VkFormat's that are supported:
@@ -287,17 +291,17 @@ void VmFramework::InitVKSwapChain()
 	fence_ci.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
 	for (uint32_t i = 0; i < FRAME_LAG; i++) {
-		result = vkCreateFence(m_vkDevice, &fence_ci, nullptr, &m_vkDrawFence[i]);
+		result = vkCreateFence(m_vkDeviceManager.vkDevice, &fence_ci, nullptr, &m_vkDrawFence[i]);
 		assert(result == VK_SUCCESS);
 
-		result = vkCreateSemaphore(m_vkDevice, &semaphoreCreateInfo, nullptr, &m_vkImageAcquiredSemaphores[i]);
+		result = vkCreateSemaphore(m_vkDeviceManager.vkDevice, &semaphoreCreateInfo, nullptr, &m_vkImageAcquiredSemaphores[i]);
 		assert(result == VK_SUCCESS);
 
-		result = vkCreateSemaphore( m_vkDevice, &semaphoreCreateInfo, nullptr, &m_vkDrawCompleteSemaphores[i]);
+		result = vkCreateSemaphore(m_vkDeviceManager.vkDevice, &semaphoreCreateInfo, nullptr, &m_vkDrawCompleteSemaphores[i]);
 		assert(result == VK_SUCCESS);
 
 		if (m_bSeparatePresentQueue) {
-			result = vkCreateSemaphore(m_vkDevice, &semaphoreCreateInfo, nullptr, &m_vkLargeOwnershipSemaphores[i]);
+			result = vkCreateSemaphore(m_vkDeviceManager.vkDevice, &semaphoreCreateInfo, nullptr, &m_vkLargeOwnershipSemaphores[i]);
 			assert(result == VK_SUCCESS);
 		}
 	}
@@ -339,7 +343,7 @@ VkResult VmFramework::InitDevice()
 		deviceCreateInfo.queueCreateInfoCount = 2;
 	}
 
-	result = vkCreateDevice(m_vkPhysicalDevice, &deviceCreateInfo, NULL, &m_vkDevice);
+	result = vkCreateDevice(m_vkPhysicalDevice, &deviceCreateInfo, NULL, &m_vkDeviceManager.vkDevice);
 	assert(result == VK_SUCCESS);
 	return result;
 }
@@ -354,7 +358,7 @@ void VmFramework::CreateCommandPoolAndCommandBuffer()
 	commandPoolInfo.queueFamilyIndex = m_nGraphicQueueFamilyIndex;
 	commandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 	
-	result = vkCreateCommandPool(m_vkDevice, &commandPoolInfo, nullptr, &m_vkCommandPool);
+	result = vkCreateCommandPool(m_vkDeviceManager.vkDevice, &commandPoolInfo, nullptr, &m_vkCommandPool);
 	assert(result == VK_SUCCESS);
 
 	// InitSwapChain과 InitCommandPool이 선행되어야 한다.
@@ -365,7 +369,7 @@ void VmFramework::CreateCommandPoolAndCommandBuffer()
 	commandBufferInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	commandBufferInfo.commandBufferCount = 1;
 
-	result = vkAllocateCommandBuffers(m_vkDevice, &commandBufferInfo, &m_vkCommandBuffer);
+	result = vkAllocateCommandBuffers(m_vkDeviceManager.vkDevice, &commandBufferInfo, &m_vkCommandBuffer);
 	assert(result == VK_SUCCESS);
 
 	VkCommandBufferBeginInfo commandBufferBeginInfo = {};
@@ -470,15 +474,15 @@ void VmFramework::CreateSwapChainBuffer(VkImageUsageFlags usageFlags)
 		swapchain_ci.queueFamilyIndexCount = 2;
 		swapchain_ci.pQueueFamilyIndices = queueFamilyIndices;
 	}
-	result = vkCreateSwapchainKHR(m_vkDevice, &swapchain_ci, nullptr, &m_vkSwapchain);
+	result = vkCreateSwapchainKHR(m_vkDeviceManager.vkDevice, &swapchain_ci, nullptr, &m_vkSwapchain);
 	assert(result == VK_SUCCESS);
 
-	result = vkGetSwapchainImagesKHR(m_vkDevice, m_vkSwapchain, &m_nSwapchainImageCount, nullptr);
+	result = vkGetSwapchainImagesKHR(m_vkDeviceManager.vkDevice, m_vkSwapchain, &m_nSwapchainImageCount, nullptr);
 	assert(result == VK_SUCCESS);
 
 	VkImage *swapchainImages = (VkImage *)malloc(m_nSwapchainImageCount * sizeof(VkImage));
 	assert(swapchainImages);
-	result = vkGetSwapchainImagesKHR(m_vkDevice, m_vkSwapchain, &m_nSwapchainImageCount, swapchainImages);
+	result = vkGetSwapchainImagesKHR(m_vkDeviceManager.vkDevice, m_vkSwapchain, &m_nSwapchainImageCount, swapchainImages);
 	assert(result == VK_SUCCESS);
 
 	for (uint32_t i = 0; i < m_nSwapchainImageCount; i++) {
@@ -505,7 +509,7 @@ void VmFramework::CreateSwapChainBuffer(VkImageUsageFlags usageFlags)
 
 		color_image_view.image = sc_buffer.image;
 
-		result = vkCreateImageView(m_vkDevice, &color_image_view, nullptr, &sc_buffer.view);
+		result = vkCreateImageView(m_vkDeviceManager.vkDevice, &color_image_view, nullptr, &sc_buffer.view);
 		m_vvkSwapchainBuffers.push_back(sc_buffer);
 		assert(result == VK_SUCCESS);
 	}
@@ -521,45 +525,44 @@ void VmFramework::DestroyVulkan()
 {
 	for (uint32_t i = 0; i < m_nSwapchainImageCount; ++i)
 	{
-		vkDestroySemaphore(m_vkDevice, m_vkImageAcquiredSemaphores[i], nullptr);
-		vkDestroyFence(m_vkDevice, m_vkDrawFence[i], nullptr);
+		vkDestroySemaphore(m_vkDeviceManager.vkDevice, m_vkImageAcquiredSemaphores[i], nullptr);
+		vkDestroyFence(m_vkDeviceManager.vkDevice, m_vkDrawFence[i], nullptr);
 	}
-	vkDestroyPipeline(m_vkDevice, m_vkPipeline, nullptr);
-	vkDestroyBuffer(m_vkDevice, vertex_buffer.buf, nullptr);
-	vkFreeMemory(m_vkDevice, vertex_buffer.mem, nullptr);
+	vkDestroyPipeline(m_vkDeviceManager.vkDevice, m_vkPipeline, nullptr);
+	vkDestroyBuffer(m_vkDeviceManager.vkDevice, vertex_buffer.buf, nullptr);
+	vkFreeMemory(m_vkDeviceManager.vkDevice, vertex_buffer.mem, nullptr);
 
 	for (uint32_t i = 0; i < m_nSwapchainImageCount; i++) {
-		vkDestroyFramebuffer(m_vkDevice, m_pFrameBuffers[i], NULL);
+		vkDestroyFramebuffer(m_vkDeviceManager.vkDevice, m_pFrameBuffers[i], NULL);
 	}
 	delete[] m_pFrameBuffers;
 
-	vkDestroyShaderModule(m_vkDevice, m_ShaderStages[0].module, nullptr);
-	vkDestroyShaderModule(m_vkDevice, m_ShaderStages[1].module, nullptr);
+	vkDestroyShaderModule(m_vkDeviceManager.vkDevice, m_ShaderStages[0].module, nullptr);
+	vkDestroyShaderModule(m_vkDeviceManager.vkDevice, m_ShaderStages[1].module, nullptr);
 
-	vkDestroyRenderPass(m_vkDevice, m_Render_Pass, nullptr);
-	vkDestroyDescriptorPool(m_vkDevice, m_Desc_Pool, nullptr);
+	vkDestroyRenderPass(m_vkDeviceManager.vkDevice, m_Render_Pass, nullptr);
+	vkDestroyDescriptorPool(m_vkDeviceManager.vkDevice, m_vkDeviceManager.vkDescriptorPool, nullptr);
 
 	// destroy_uniform_buffer
-	vkDestroyBuffer(m_vkDevice, m_UniformData.buf, nullptr);
-	vkFreeMemory(m_vkDevice, m_UniformData.mem, nullptr);
+	vkDestroyBuffer(m_vkDeviceManager.vkDevice, m_UniformData.buf, nullptr);
+	vkFreeMemory(m_vkDeviceManager.vkDevice, m_UniformData.mem, nullptr);
 
 	// destroy_descriptor_and_pipeline_layouts
-	for (uint32_t i = 0; i < NUM_DESCRIPTOR_SETS; i++)
-		vkDestroyDescriptorSetLayout(m_vkDevice, m_vDesc_Layout[i], nullptr);
-	vkDestroyPipelineLayout(m_vkDevice, m_vkPipeline_Layout, nullptr);
+	vkDestroyDescriptorSetLayout(m_vkDeviceManager.vkDevice, m_vkDeviceManager.vkDescriptorSetLayout, nullptr);
+	vkDestroyPipelineLayout(m_vkDeviceManager.vkDevice, m_vkPipeline_Layout, nullptr);
 
 	for (uint32_t i = 0; i < m_nSwapchainImageCount; i++)
 	{
-		vkDestroyImageView(m_vkDevice, m_vvkSwapchainBuffers[i].view, nullptr);
+		vkDestroyImageView(m_vkDeviceManager.vkDevice, m_vvkSwapchainBuffers[i].view, nullptr);
 	}
-	vkDestroySwapchainKHR(m_vkDevice, m_vkSwapchain, nullptr);
+	vkDestroySwapchainKHR(m_vkDeviceManager.vkDevice, m_vkSwapchain, nullptr);
 
 	VkCommandBuffer cmd_bufs[1] = { m_vkCommandBuffer };
-	vkFreeCommandBuffers(m_vkDevice, m_vkCommandPool, 1, cmd_bufs);
-	vkDestroyCommandPool(m_vkDevice, m_vkCommandPool, nullptr);
+	vkFreeCommandBuffers(m_vkDeviceManager.vkDevice, m_vkCommandPool, 1, cmd_bufs);
+	vkDestroyCommandPool(m_vkDeviceManager.vkDevice, m_vkCommandPool, nullptr);
 
-	vkDeviceWaitIdle(m_vkDevice);
-	vkDestroyDevice(m_vkDevice, nullptr);
+	vkDeviceWaitIdle(m_vkDeviceManager.vkDevice);
+	vkDestroyDevice(m_vkDeviceManager.vkDevice, nullptr);
 	vkDestroySurfaceKHR(m_vkInstance, m_vkSurface, nullptr);
 	DestroyWindow(m_hWnd);
 
@@ -668,7 +671,7 @@ void VmFramework::CreateDepthBuffer()
 	image_info.flags = 0;
 	
 	/* Create image */
-	result = vkCreateImage(m_vkDevice, &image_info, nullptr, &m_Depth.image);
+	result = vkCreateImage(m_vkDeviceManager.vkDevice, &image_info, nullptr, &m_Depth.image);
 	assert(result == VK_SUCCESS);
 
 	VkMemoryAllocateInfo mem_alloc = {};
@@ -702,7 +705,7 @@ void VmFramework::CreateDepthBuffer()
 
 	VkMemoryRequirements mem_reqs;
 
-	vkGetImageMemoryRequirements(m_vkDevice, m_Depth.image, &mem_reqs);
+	vkGetImageMemoryRequirements(m_vkDeviceManager.vkDevice, m_Depth.image, &mem_reqs);
 
 	mem_alloc.allocationSize = mem_reqs.size;
 	/* Use the memory properties to determine the type of memory required */
@@ -712,16 +715,16 @@ void VmFramework::CreateDepthBuffer()
 	assert(pass);
 
 	/* Allocate memory */
-	result = vkAllocateMemory(m_vkDevice, &mem_alloc, nullptr, &m_Depth.mem);
+	result = vkAllocateMemory(m_vkDeviceManager.vkDevice, &mem_alloc, nullptr, &m_Depth.mem);
 	assert(result == VK_SUCCESS);
 
 	/* Bind memory */
-	result = vkBindImageMemory(m_vkDevice, m_Depth.image, m_Depth.mem, 0);
+	result = vkBindImageMemory(m_vkDeviceManager.vkDevice, m_Depth.image, m_Depth.mem, 0);
 	assert(result == VK_SUCCESS);
 
 	/* Create image view */
 	view_info.image = m_Depth.image;
-	result = vkCreateImageView(m_vkDevice, &view_info, NULL, &m_Depth.view);
+	result = vkCreateImageView(m_vkDeviceManager.vkDevice, &view_info, NULL, &m_Depth.view);
 	assert(result == VK_SUCCESS);
 }
 
@@ -817,12 +820,12 @@ void VmFramework::InitUniformBuffer()
 	buf_info.pQueueFamilyIndices = nullptr;
 	buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	buf_info.flags = 0;
-	result = vkCreateBuffer(m_vkDevice, &buf_info, nullptr, &m_UniformData.buf);
+	result = vkCreateBuffer(m_vkDeviceManager.vkDevice, &buf_info, nullptr, &m_UniformData.buf);
 	assert(result == VK_SUCCESS);
 
 	// Uniform Buffer 메모리 할당
 	VkMemoryRequirements mem_reqs;
-	vkGetBufferMemoryRequirements(m_vkDevice, m_UniformData.buf, &mem_reqs);
+	vkGetBufferMemoryRequirements(m_vkDeviceManager.vkDevice, m_UniformData.buf, &mem_reqs);
 
 	VkMemoryAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -833,7 +836,7 @@ void VmFramework::InitUniformBuffer()
 	bool bPass = memory_type_from_properties(mem_reqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &alloc_info.memoryTypeIndex);
 	assert(bPass && "No mappable, coherent memory");
 
-	result = vkAllocateMemory(m_vkDevice, &alloc_info, nullptr, &(m_UniformData.mem));
+	result = vkAllocateMemory(m_vkDeviceManager.vkDevice, &alloc_info, nullptr, &(m_UniformData.mem));
 	assert(result == VK_SUCCESS);
 
 	// Uniform Buffer Memory 매핑 및 설정
@@ -841,13 +844,13 @@ void VmFramework::InitUniformBuffer()
 	// Uniform Buffer는 쉐이더가 읽을 데이터(MVP 행렬)로 채워 넣어야 한다.
 	// * 메모리에 대한 CPU 액세스를 얻으려면 맵핑 해야 한다.
 	uint8_t *pData;
-	result = vkMapMemory(m_vkDevice, m_UniformData.mem, 0, mem_reqs.size, 0, (void**)&pData);
+	result = vkMapMemory(m_vkDeviceManager.vkDevice, m_UniformData.mem, 0, mem_reqs.size, 0, (void**)&pData);
 	assert(result == VK_SUCCESS);
 
 	memcpy(pData, &mtxMVP, sizeof(mtxMVP));
-	vkUnmapMemory(m_vkDevice, m_UniformData.mem);
+	vkUnmapMemory(m_vkDeviceManager.vkDevice, m_UniformData.mem);
 
-	result = vkBindBufferMemory(m_vkDevice, m_UniformData.buf, m_UniformData.mem, 0);
+	result = vkBindBufferMemory(m_vkDeviceManager.vkDevice, m_UniformData.buf, m_UniformData.mem, 0);
 	assert(result == VK_SUCCESS);
 
 	m_UniformData.buffer_info.buffer = m_UniformData.buf;
@@ -873,12 +876,12 @@ void VmFramework::InitBoneUniformBuffer()
 	buf_info.pQueueFamilyIndices = nullptr;
 	buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	buf_info.flags = 0;
-	result = vkCreateBuffer(m_vkDevice, &buf_info, nullptr, &m_BoneUniformData.buf);
+	result = vkCreateBuffer(m_vkDeviceManager.vkDevice, &buf_info, nullptr, &m_BoneUniformData.buf);
 	assert(result == VK_SUCCESS);
 
 	// Uniform Buffer 메모리 할당
 	VkMemoryRequirements mem_reqs;
-	vkGetBufferMemoryRequirements(m_vkDevice, m_BoneUniformData.buf, &mem_reqs);
+	vkGetBufferMemoryRequirements(m_vkDeviceManager.vkDevice, m_BoneUniformData.buf, &mem_reqs);
 
 	VkMemoryAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -889,17 +892,17 @@ void VmFramework::InitBoneUniformBuffer()
 	bool bPass = memory_type_from_properties(mem_reqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &alloc_info.memoryTypeIndex);
 	assert(bPass && "No mappable, coherent memory");
 
-	result = vkAllocateMemory(m_vkDevice, &alloc_info, nullptr, &(m_BoneUniformData.mem));
+	result = vkAllocateMemory(m_vkDeviceManager.vkDevice, &alloc_info, nullptr, &(m_BoneUniformData.mem));
 	assert(result == VK_SUCCESS);
 
 	uint8_t *pData;
-	result = vkMapMemory(m_vkDevice, m_BoneUniformData.mem, 0, mem_reqs.size, 0, (void**)&pData);
+	result = vkMapMemory(m_vkDeviceManager.vkDevice, m_BoneUniformData.mem, 0, mem_reqs.size, 0, (void**)&pData);
 	assert(result == VK_SUCCESS);
 
 	m_pFbxModel->GetBoneUniformData(pData);
-	vkUnmapMemory(m_vkDevice, m_BoneUniformData.mem);
+	vkUnmapMemory(m_vkDeviceManager.vkDevice, m_BoneUniformData.mem);
 
-	result = vkBindBufferMemory(m_vkDevice, m_BoneUniformData.buf, m_BoneUniformData.mem, 0);
+	result = vkBindBufferMemory(m_vkDeviceManager.vkDevice, m_BoneUniformData.buf, m_BoneUniformData.mem, 0);
 	assert(result == VK_SUCCESS);
 
 	m_BoneUniformData.buffer_info.buffer = m_BoneUniformData.buf;
@@ -939,8 +942,7 @@ void VmFramework::InitDescriptorSetAndPipelineLayout(bool use_texture)
 
 	VkResult result;
 	
-	m_vDesc_Layout.resize(NUM_DESCRIPTOR_SETS);
-	result = vkCreateDescriptorSetLayout(m_vkDevice, &descriptor_layout, nullptr, m_vDesc_Layout.data());
+	result = vkCreateDescriptorSetLayout(m_vkDeviceManager.vkDevice, &descriptor_layout, nullptr, &m_vkDeviceManager.vkDescriptorSetLayout);
 	
 	assert(result == VK_SUCCESS);
 	
@@ -950,11 +952,11 @@ void VmFramework::InitDescriptorSetAndPipelineLayout(bool use_texture)
 	pPipelineLayoutCreateInfo.pNext = nullptr;
 	pPipelineLayoutCreateInfo.pushConstantRangeCount = 0;
 	pPipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
-	pPipelineLayoutCreateInfo.setLayoutCount = NUM_DESCRIPTOR_SETS;
-	pPipelineLayoutCreateInfo.pSetLayouts =m_vDesc_Layout.data();
+	pPipelineLayoutCreateInfo.setLayoutCount = 1;
+	pPipelineLayoutCreateInfo.pSetLayouts = &m_vkDeviceManager.vkDescriptorSetLayout;
 
 
-	result = vkCreatePipelineLayout(m_vkDevice, &pPipelineLayoutCreateInfo, nullptr, &m_vkPipeline_Layout);
+	result = vkCreatePipelineLayout(m_vkDeviceManager.vkDevice, &pPipelineLayoutCreateInfo, nullptr, &m_vkPipeline_Layout);
 	assert(result == VK_SUCCESS);
 }
 
@@ -981,7 +983,7 @@ void VmFramework::InitDescriptorPool(bool use_texture)
 	descriptor_pool.poolSizeCount = use_texture ? 3 : 2;
 	descriptor_pool.pPoolSizes = type_count;
 
-	result = vkCreateDescriptorPool(m_vkDevice, &descriptor_pool, nullptr, &m_Desc_Pool);
+	result = vkCreateDescriptorPool(m_vkDeviceManager.vkDevice, &descriptor_pool, nullptr, &m_vkDeviceManager.vkDescriptorPool);
 	assert(result == VK_SUCCESS);
 }
 
@@ -994,13 +996,11 @@ void VmFramework::InitDescriptorSet(bool use_texture)
 	VkDescriptorSetAllocateInfo alloc_info[1];
 	alloc_info[0].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	alloc_info[0].pNext = nullptr;
-	alloc_info[0].descriptorPool = m_Desc_Pool;
-	alloc_info[0].descriptorSetCount = NUM_DESCRIPTOR_SETS;
-	alloc_info[0].pSetLayouts = m_vDesc_Layout.data();
+	alloc_info[0].descriptorPool = m_vkDeviceManager.vkDescriptorPool;
+	alloc_info[0].descriptorSetCount = 1;
+	alloc_info[0].pSetLayouts = &m_vkDeviceManager.vkDescriptorSetLayout;
 	
-	m_vDesc_Set.resize(NUM_DESCRIPTOR_SETS);
-
-	result = vkAllocateDescriptorSets(m_vkDevice, alloc_info, m_vDesc_Set.data());
+	result = vkAllocateDescriptorSets(m_vkDeviceManager.vkDevice, alloc_info, &m_vkDescriptorSet);
 	assert(result == VK_SUCCESS);
 
 	// 디스크립터 셋 업데이트
@@ -1009,7 +1009,7 @@ void VmFramework::InitDescriptorSet(bool use_texture)
 	writes[0] = {};
 	writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	writes[0].pNext = nullptr;
-	writes[0].dstSet = m_vDesc_Set[0];
+	writes[0].dstSet = m_vkDescriptorSet;
 	writes[0].descriptorCount = 1;
 	writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	writes[0].pBufferInfo = &m_UniformData.buffer_info;
@@ -1020,7 +1020,7 @@ void VmFramework::InitDescriptorSet(bool use_texture)
 	writes[1] = {};
 	writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	writes[1].pNext = nullptr;
-	writes[1].dstSet = m_vDesc_Set[0];
+	writes[1].dstSet = m_vkDescriptorSet;
 	writes[1].descriptorCount = 1;
 	writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	writes[1].pBufferInfo = &m_BoneUniformData.buffer_info;
@@ -1040,7 +1040,7 @@ void VmFramework::InitDescriptorSet(bool use_texture)
 
 		writes[2] = {};
 		writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writes[2].dstSet = m_vDesc_Set[0];
+		writes[2].dstSet = m_vkDescriptorSet;
 		writes[2].dstBinding = 2;
 		writes[2].descriptorCount = 1;
 		writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1049,7 +1049,7 @@ void VmFramework::InitDescriptorSet(bool use_texture)
 	}
 
 	// Cube.c 2227 Line
-	vkUpdateDescriptorSets(m_vkDevice, use_texture ? 3 : 2, writes, 0, nullptr);
+	vkUpdateDescriptorSets(m_vkDeviceManager.vkDevice, use_texture ? 3 : 2, writes, 0, nullptr);
  }
 
 void VmFramework::InitRenderPass(bool include_depth)
@@ -1111,7 +1111,7 @@ void VmFramework::InitRenderPass(bool include_depth)
 	rp_info.dependencyCount = 0;
 	rp_info.pDependencies = NULL;
 
-	result = vkCreateRenderPass(m_vkDevice, &rp_info, nullptr, &m_Render_Pass);
+	result = vkCreateRenderPass(m_vkDeviceManager.vkDevice, &rp_info, nullptr, &m_Render_Pass);
 	assert(result == VK_SUCCESS);
 }
 
@@ -1137,7 +1137,7 @@ void VmFramework::InitShaders()
 	moduleCreateInfo.flags = 0;
 	moduleCreateInfo.codeSize = size;// *sizeof(uint32_t);
 	moduleCreateInfo.pCode = (uint32_t*)vertShaderCode;
-	result = vkCreateShaderModule(m_vkDevice, &moduleCreateInfo, nullptr, &m_ShaderStages[0].module);
+	result = vkCreateShaderModule(m_vkDeviceManager.vkDevice, &moduleCreateInfo, nullptr, &m_ShaderStages[0].module);
 	assert(result == VK_SUCCESS);
 	free(vertShaderCode);
 
@@ -1157,7 +1157,7 @@ void VmFramework::InitShaders()
 	moduleCreateInfo.flags = 0;
 	moduleCreateInfo.codeSize = size;// *sizeof(uint32_t);
 	moduleCreateInfo.pCode = (uint32_t*)fragShaderCode;
-	result = vkCreateShaderModule(m_vkDevice, &moduleCreateInfo, nullptr, &m_ShaderStages[1].module);
+	result = vkCreateShaderModule(m_vkDeviceManager.vkDevice, &moduleCreateInfo, nullptr, &m_ShaderStages[1].module);
 	assert(result == VK_SUCCESS);
 	free(fragShaderCode);
 }
@@ -1184,7 +1184,7 @@ void VmFramework::InitFrameBuffer(bool include_depth)
 	for (uint32_t i = 0; i < m_nSwapchainImageCount; i++)
 	{
 		attachments[0] = m_vvkSwapchainBuffers[i].view;
-		result = vkCreateFramebuffer(m_vkDevice, &fb_info, nullptr, &m_pFrameBuffers[i]);
+		result = vkCreateFramebuffer(m_vkDeviceManager.vkDevice, &fb_info, nullptr, &m_pFrameBuffers[i]);
 		assert(result == VK_SUCCESS);
 	}
 }
@@ -1204,11 +1204,11 @@ void VmFramework::InitVertexBuffer(bool use_texture)
 	buf_info.pQueueFamilyIndices = nullptr;
 	buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	buf_info.flags = 0;
-	result = vkCreateBuffer(m_vkDevice, &buf_info, NULL, &vertex_buffer.buf);
+	result = vkCreateBuffer(m_vkDeviceManager.vkDevice, &buf_info, NULL, &vertex_buffer.buf);
 	assert(result == VK_SUCCESS);
 
 	VkMemoryRequirements mem_reqs;
-	vkGetBufferMemoryRequirements(m_vkDevice, vertex_buffer.buf, &mem_reqs);
+	vkGetBufferMemoryRequirements(m_vkDeviceManager.vkDevice, vertex_buffer.buf, &mem_reqs);
 
 	VkMemoryAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -1222,21 +1222,21 @@ void VmFramework::InitVertexBuffer(bool use_texture)
 		&alloc_info.memoryTypeIndex);
 	assert(pass && "No mappable, coherent memory"); // 여기까지
 
-	result = vkAllocateMemory(m_vkDevice, &alloc_info, nullptr, &vertex_buffer.mem);
+	result = vkAllocateMemory(m_vkDeviceManager.vkDevice, &alloc_info, nullptr, &vertex_buffer.mem);
 	assert(result == VK_SUCCESS);
 
 	vertex_buffer.buffer_info.range = mem_reqs.size;
 	vertex_buffer.buffer_info.offset = 0;
 
 	uint8_t* pData;
-	result = vkMapMemory(m_vkDevice, vertex_buffer.mem, 0, mem_reqs.size, 0, (void**)&pData);
+	result = vkMapMemory(m_vkDeviceManager.vkDevice, vertex_buffer.mem, 0, mem_reqs.size, 0, (void**)&pData);
 	assert(result == VK_SUCCESS);
 
 	//memcpy(pData, g_vb_IndexCube, sizeof(g_vb_IndexCube));
 	m_pFbxModel->GetVBDataAndMemcpy(pData);
-	vkUnmapMemory(m_vkDevice, vertex_buffer.mem);
+	vkUnmapMemory(m_vkDeviceManager.vkDevice, vertex_buffer.mem);
 
-	result = vkBindBufferMemory(m_vkDevice, vertex_buffer.buf, vertex_buffer.mem, 0);
+	result = vkBindBufferMemory(m_vkDeviceManager.vkDevice, vertex_buffer.buf, vertex_buffer.mem, 0);
 	assert(result == VK_SUCCESS);
 
 	// 여기서는 필요하지 않지만, 파이프라인을 만들 때에 필요한 정보들.
@@ -1280,11 +1280,11 @@ void VmFramework::InitIndexBuffer()
 	buf_info.pQueueFamilyIndices = nullptr;
 	buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	buf_info.flags = 0;
-	result = vkCreateBuffer(m_vkDevice, &buf_info, nullptr, &index_buffer.buf);
+	result = vkCreateBuffer(m_vkDeviceManager.vkDevice, &buf_info, nullptr, &index_buffer.buf);
 	assert(result == VK_SUCCESS);
 
 	VkMemoryRequirements mem_reqs;
-	vkGetBufferMemoryRequirements(m_vkDevice, index_buffer.buf, &mem_reqs);
+	vkGetBufferMemoryRequirements(m_vkDeviceManager.vkDevice, index_buffer.buf, &mem_reqs);
 	
 	VkMemoryAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -1298,22 +1298,22 @@ void VmFramework::InitIndexBuffer()
 		&alloc_info.memoryTypeIndex);
 	assert(pass && "No mappable, coherent memory");
 
-	result = vkAllocateMemory(m_vkDevice, &alloc_info, nullptr, &index_buffer.mem);
+	result = vkAllocateMemory(m_vkDeviceManager.vkDevice, &alloc_info, nullptr, &index_buffer.mem);
 	assert(result == VK_SUCCESS);
 
 	index_buffer.buffer_info.range = mem_reqs.size;
 	index_buffer.buffer_info.offset = 0;
 
 	uint16_t* pData;
-	result = vkMapMemory(m_vkDevice, index_buffer.mem, 0, mem_reqs.size, 0, (void**)&pData);
+	result = vkMapMemory(m_vkDeviceManager.vkDevice, index_buffer.mem, 0, mem_reqs.size, 0, (void**)&pData);
 	assert(result == VK_SUCCESS);
 
 	//memcpy(pData, g_cubeIndices, sizeof(g_cubeIndices));
 	m_pFbxModel->GetIndexDataAndMemcpy(pData);
 
-	vkUnmapMemory(m_vkDevice, index_buffer.mem);
+	vkUnmapMemory(m_vkDeviceManager.vkDevice, index_buffer.mem);
 
-	result = vkBindBufferMemory(m_vkDevice, index_buffer.buf, index_buffer.mem, 0);
+	result = vkBindBufferMemory(m_vkDeviceManager.vkDevice, index_buffer.buf, index_buffer.mem, 0);
 	assert(result == VK_SUCCESS);
 }
 
@@ -1328,7 +1328,7 @@ void VmFramework::InitPipeline(bool include_depth, bool include_vi)
 	pipelineCache_ci.initialDataSize = 0;
 	pipelineCache_ci.pInitialData = nullptr;
 	pipelineCache_ci.flags = 0;
-	result = vkCreatePipelineCache(m_vkDevice, &pipelineCache_ci, nullptr, &pipelineCache);
+	result = vkCreatePipelineCache(m_vkDeviceManager.vkDevice, &pipelineCache_ci, nullptr, &pipelineCache);
 	assert(result == VK_SUCCESS);
 
 	// Dynamic Pipeline State는 Command Buffer의 실행 중 명령에 의해 변경될 수 있는 상태를 말한다.
@@ -1462,11 +1462,11 @@ void VmFramework::InitPipeline(bool include_depth, bool include_vi)
 	pipeline.renderPass = m_Render_Pass;
 	pipeline.subpass = 0;
 
-	result = vkCreateGraphicsPipelines(m_vkDevice, pipelineCache, 1, &pipeline, nullptr, &m_vkPipeline);
+	result = vkCreateGraphicsPipelines(m_vkDeviceManager.vkDevice, pipelineCache, 1, &pipeline, nullptr, &m_vkPipeline);
 	assert(result == VK_SUCCESS); /// ShaderStage ㅡㅡ
 }
 
-void VmFramework::Init_Viewports()
+void VmFramework::SetViewports()
 {
 	m_vkViewport.width = (float)m_nWindowWidth;
 	m_vkViewport.height = (float)m_nWindowHeight;
@@ -1477,7 +1477,7 @@ void VmFramework::Init_Viewports()
 	vkCmdSetViewport(m_vkCommandBuffer, 0, NUM_VIEWPORTS, &m_vkViewport);
 }
 
-void VmFramework::Init_Scissors()
+void VmFramework::SetScissors()
 {
 	m_vkScissor.extent.width = m_nWindowWidth;
 	m_vkScissor.extent.height = m_nWindowHeight;
@@ -1486,7 +1486,7 @@ void VmFramework::Init_Scissors()
 	vkCmdSetScissor(m_vkCommandBuffer, 0, NUM_SCISSORS, &m_vkScissor);
 }
 
-void VmFramework::UpdateDataBuffer(int cubeNum = 0)
+void VmFramework::UpdateDataBuffer(int cubeNumX = 0, int cubeNumY = 0)
 {
 	VkResult result;
 	uint8_t *pData;
@@ -1502,7 +1502,8 @@ void VmFramework::UpdateDataBuffer(int cubeNum = 0)
 	glm::mat4 mtxProjection = glm::perspective(fov, static_cast<float>(m_nWindowWidth) / static_cast<float>(m_nWindowHeight), 0.1f, 100.0f);
 
 	glm::mat4 m_mtxModel = glm::mat4(1.0f);
-	m_mtxModel[3][0] = 50.0f * cubeNum;
+	m_mtxModel[3][0] = 25.0f * cubeNumX;
+	m_mtxModel[3][1] = 25.0f * cubeNumY;
 
 	// Vulkan clip space has inverted Y and half Z.
 	glm::mat4 mtxClip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
@@ -1523,39 +1524,39 @@ void VmFramework::UpdateDataBuffer(int cubeNum = 0)
 
 	VkMemoryRequirements mem_reqs;
 	
-	//vkWaitForFences(m_vkDevice, 1, &m_vkDrawFence, VK_TRUE, UINT64_MAX);
-	vkWaitForFences(m_vkDevice, 1, &m_vkDrawFence[m_nCurrent_Buffer], VK_TRUE, UINT64_MAX);
+	//vkWaitForFences(m_vkDeviceManager.vkDevice, 1, &m_vkDrawFence, VK_TRUE, UINT64_MAX);
+	//vkWaitForFences(m_vkDeviceManager.vkDevice, 1, &m_vkDrawFence[m_nCurrent_Buffer], VK_TRUE, UINT64_MAX);
 	
-	vkGetBufferMemoryRequirements(m_vkDevice, m_UniformData.buf, &mem_reqs);
-	result = vkMapMemory(m_vkDevice, m_UniformData.mem, 0, VK_WHOLE_SIZE, 0, (void**)&pData);
+	vkGetBufferMemoryRequirements(m_vkDeviceManager.vkDevice, m_UniformData.buf, &mem_reqs);
+	result = vkMapMemory(m_vkDeviceManager.vkDevice, m_UniformData.mem, 0, VK_WHOLE_SIZE, 0, (void**)&pData);
 	assert(result == VK_SUCCESS);
 
 	memcpy(pData, &mtxMVP, sizeof(mtxMVP));
 
-	vkUnmapMemory(m_vkDevice, m_UniformData.mem);
+	vkUnmapMemory(m_vkDeviceManager.vkDevice, m_UniformData.mem);
 
-	result = vkBindBufferMemory(m_vkDevice, m_UniformData.buf, m_UniformData.mem, 0);
+	//result = vkBindBufferMemory(m_vkDeviceManager.vkDevice, m_UniformData.buf, m_UniformData.mem, 0);
 	assert(result == VK_SUCCESS);
 	
 	// 왜일까?
-	vkCmdUpdateBuffer(m_vkCommandBuffer, m_UniformData.buf, 0, mem_reqs.size, pData);
+	//vkCmdUpdateBuffer(m_vkCommandBuffer, m_UniformData.buf, 0, mem_reqs.size, pData);
 
 	// m_BoneUniform
-	vkGetBufferMemoryRequirements(m_vkDevice, m_BoneUniformData.buf, &mem_reqs);
-	result = vkMapMemory(m_vkDevice, m_BoneUniformData.mem, 0, VK_WHOLE_SIZE, 0, (void**)&pData);
+	vkGetBufferMemoryRequirements(m_vkDeviceManager.vkDevice, m_BoneUniformData.buf, &mem_reqs);
+	result = vkMapMemory(m_vkDeviceManager.vkDevice, m_BoneUniformData.mem, 0, VK_WHOLE_SIZE, 0, (void**)&pData);
 	assert(result == VK_SUCCESS);
 	m_pFbxModel->GetBoneUniformData(pData);
-	vkUnmapMemory(m_vkDevice, m_BoneUniformData.mem);
+	vkUnmapMemory(m_vkDeviceManager.vkDevice, m_BoneUniformData.mem);
 }
 
 void VmFramework::Present()
 {
 	VkResult result;
 
-	vkWaitForFences(m_vkDevice, 1, &m_vkDrawFence[m_nCurrent_Buffer], VK_TRUE, UINT64_MAX);
-	vkResetFences(m_vkDevice, 1, &m_vkDrawFence[m_nCurrent_Buffer]);
+	vkWaitForFences(m_vkDeviceManager.vkDevice, 1, &m_vkDrawFence[m_nCurrent_Buffer], VK_TRUE, UINT64_MAX);
+	vkResetFences(m_vkDeviceManager.vkDevice, 1, &m_vkDrawFence[m_nCurrent_Buffer]);
 
-	result = vkAcquireNextImageKHR(m_vkDevice, m_vkSwapchain, UINT64_MAX, m_vkImageAcquiredSemaphores[m_nCurrent_Buffer], m_vkDrawFence[m_nCurrent_Buffer], &m_nCurrent_Buffer);
+	result = vkAcquireNextImageKHR(m_vkDeviceManager.vkDevice, m_vkSwapchain, UINT64_MAX, m_vkImageAcquiredSemaphores[m_nCurrent_Buffer], m_vkDrawFence[m_nCurrent_Buffer], &m_nCurrent_Buffer);
 	
 	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
 		// demo->swapchain is out of date (e.g. the window was resized) and
@@ -1601,9 +1602,9 @@ void VmFramework::Present()
 	result = vkQueuePresentKHR(m_vkPresentQueue, &present);
 	// Present 전에, Command Buffer가 만들어졌는지 확인하며 대기
 	//do {
-	//	result = vkWaitForFences(m_vkDevice, 1, &m_vkDrawFence, VK_TRUE, FENCE_TIMEOUT);
+	//	result = vkWaitForFences(m_vkDeviceManager.vkDevice, 1, &m_vkDrawFence, VK_TRUE, FENCE_TIMEOUT);
 	//} while (result == VK_TIMEOUT);
-	//vkResetFences(m_vkDevice, 1, &m_vkDrawFence);
+	//vkResetFences(m_vkDeviceManager.vkDevice, 1, &m_vkDrawFence);
 	//assert(result == VK_SUCCESS);
 
 	m_nCurrent_Buffer++;
@@ -1641,23 +1642,26 @@ void VmFramework::Tick()
 
 	result = vkBeginCommandBuffer(m_vkCommandBuffer, &cmd_buf_info);
 
-	Init_Viewports();
-	Init_Scissors();
 	vkCmdBeginRenderPass(m_vkCommandBuffer, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+	SetViewports();	
+	SetScissors();
+	vkCmdBindDescriptorSets(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline_Layout, 0, 1, &m_vkDescriptorSet, 0, nullptr);
 
-	for (int i = -1; i < 2; i++)
+	for (int i = -50; i < 50; i++)
 	{
-		const VkDeviceSize offsets[1] = { 0 };
-		vkCmdBindVertexBuffers(m_vkCommandBuffer, 0, 1, &vertex_buffer.buf, offsets);
-		vkCmdBindIndexBuffer(m_vkCommandBuffer, index_buffer.buf, 0, VK_INDEX_TYPE_UINT16);
-	
-		vkCmdBindPipeline(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline);
-		vkCmdBindDescriptorSets(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline_Layout, 0, NUM_DESCRIPTOR_SETS, m_vDesc_Set.data(), 0, nullptr);
+		for (int j = -50; j < 50; j++)
+		{
+			const VkDeviceSize offsets[1] = { 0 };
+			vkCmdBindPipeline(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline);
+			//vkCmdBindVertexBuffers(m_vkCommandBuffer, 0, 1, &vertex_buffer.buf, offsets);
+			//vkCmdBindIndexBuffer(m_vkCommandBuffer, index_buffer.buf, 0, VK_INDEX_TYPE_UINT16);
 
-		UpdateDataBuffer(i);
 
-		//vkCmdDraw(m_vkCommandBuffer, 12 * 3, 1, 0, 0);
-		vkCmdDrawIndexed(m_vkCommandBuffer, m_pFbxModel->GetIndices(), 1, 0, 0, 0);
+			//UpdateDataBuffer(i, j);
+
+			//vkCmdDraw(m_vkCommandBuffer, 12 * 3, 1, 0, 0);
+			//vkCmdDrawIndexed(m_vkCommandBuffer, m_pFbxModel->GetIndices(), 1, 0, 0, 0);
+		}
 	}
 
 	vkCmdEndRenderPass(m_vkCommandBuffer);

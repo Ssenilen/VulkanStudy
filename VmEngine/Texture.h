@@ -3,17 +3,7 @@
 #define TEXTURE_COUNT 1
 #define TEXFORMAT VK_FORMAT_R8G8B8A8_UNORM
 
-struct texture_object {
-	VkSampler sampler;
 
-	VkImage image;
-	VkImageLayout imageLayout;
-
-	VkMemoryAllocateInfo mem_alloc;
-	VkDeviceMemory mem;
-	VkImageView view;
-	int32_t tex_width, tex_height;
-};
 
 class Texture
 {

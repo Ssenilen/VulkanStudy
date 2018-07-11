@@ -28,12 +28,7 @@ typedef struct {
 	VkImageView view;
 } depth;
 
-typedef struct {
-	VkBuffer buf;
-	VkDeviceMemory mem;
-	VkDescriptorBufferInfo buffer_info;
-} uniform_data;
-
+class VmGameObject;
 class VmFramework
 {
 public:
@@ -48,8 +43,6 @@ private:
 	/* Amount of time, in nanoseconds, to wait for a command buffer to complete */
 	enum { FENCE_TIMEOUT = 100000000 };
 
-	const uint32_t NUM_DESCRIPTOR_SETS = 1;
-	
 	void InitVulkan();
 	void InitVKInstance();
 	VkResult InitEnumerateDevice(); // GPU 정보를 얻어온다.
@@ -61,7 +54,7 @@ private:
 
 	void CalculateFrameStats();
 
-
+	VkDeviceManager m_vkDeviceManager;
 
 	uint32_t enabled_extension_count;
 	uint32_t enabled_layer_count;
@@ -85,13 +78,14 @@ private:
 	VkPhysicalDeviceMemoryProperties m_vkPhysicalDeviceMemoryProperites;
 	///
 
-
 	bool memory_type_from_properties(uint32_t typeBits, VkFlags requirements_mask, uint32_t *typeIndex);
 	void InitUniformBuffer();
 	void InitBoneUniformBuffer();
 	void InitDescriptorSetAndPipelineLayout(bool use_texture);
 	void InitDescriptorPool(bool use_texture); 
+	/// FRAMEWORK에서 드러낼 부분
 	void InitDescriptorSet(bool use_texture);
+	/// FRAMEWORK에서 드러낼 부분
 	void InitRenderPass(bool include_depth);
 	void InitShaders();
 	void InitFrameBuffer(bool include_depth);
@@ -99,10 +93,11 @@ private:
 	void InitIndexBuffer();
 	void InitPipeline(bool include_depth, bool include_vi = true);
 	
-	void Init_Viewports();
-	void Init_Scissors();
+	// Render 관련
+	void SetViewports();
+	void SetScissors();
 
-	void UpdateDataBuffer(int cubeNum);
+	void UpdateDataBuffer(int cubeNumX, int cubeNumY);
 	void Present();
 
 	HWND m_hWnd;
@@ -112,7 +107,6 @@ private:
 	VkInstance m_vkInstance;
 	std::vector<VkQueueFamilyProperties> m_vvkQueueFamilyProperties;
 
-	VkDevice m_vkDevice;
 	std::vector<const char*> m_vvkDeviceExtensionNames;
 	std::vector<layer_properties> m_vkInstanceLayerProperties;
 
@@ -131,11 +125,9 @@ private:
 	uniform_data m_UniformData;
 	uniform_data m_BoneUniformData;
 
-	std::vector<VkDescriptorSetLayout> m_vDesc_Layout;
-	std::vector<VkDescriptorSet> m_vDesc_Set;
+	VkDescriptorSet m_vkDescriptorSet;
 
 	VkPipelineLayout m_vkPipeline_Layout;
-	VkDescriptorPool m_Desc_Pool;	
 
 	VkRenderPass m_Render_Pass;
 
@@ -183,5 +175,8 @@ private:
 	float m_fCameraPosZ;
 	public:
 	void CameraMove(WPARAM wParam);
+
+	// ------- 임시로 Framework를 Scene으로 간주하고 쓴다 ---
+	std::vector<VmGameObject*> m_pGameObject;
 };
 
