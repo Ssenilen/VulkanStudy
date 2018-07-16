@@ -36,3 +36,6 @@ typedef struct {
 	Matrix4		mtxProjection;
 	Matrix4		mtxClip;
 } MatrixManager;
+
+#define VERTEX_BUFFER_BIND_ID	0
+#define INSTANCE_BUFFER_BIND_ID 1

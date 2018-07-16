@@ -20,7 +20,7 @@ void VmGameScene::Tick()
 {
 	for (auto objectIter = m_vObject.begin(); objectIter != m_vObject.end(); ++objectIter)
 	{
-		objectIter->Tick();
+		//objectIter->Tick();
 	}
 }
 

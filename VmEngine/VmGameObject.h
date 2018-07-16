@@ -12,13 +12,14 @@ public:
 	~VmGameObject();
 
 	virtual void Initialize();
-	virtual void Tick();
+	virtual void Tick(float fDeltaTime);
 	virtual void Render();
 	virtual void SetPosition(float x, float y, float z);
 	virtual void SetDescriptorSet();
 	virtual VkDescriptorSet* GetDescriptorSet() { return &m_vkDescriptorSet; }
 	virtual void UpdateUniformBuffer(MatrixManager* pMatrixManager);
 	virtual void PreDrawSetting();
+	virtual const Matrix4& GetModelMatrix() { return m_mtxModel; }
 
 private:
 	void CreateUniformBuffer();
@@ -33,6 +34,12 @@ private:
 	texture_object* m_pTexture;
 	MatrixManager m_MatrixManager;
 
+	// Object
+	Matrix4 m_mtxRotate;
+	Matrix4 m_mtxTranslate;
+	float	m_fRotateAngle;
+	Vector3 m_vRotateAxis;
+	
 	// Vertex Buffer
 	VkBuffer m_vkVertexBuffer;
 	VkDeviceMemory m_vkVertexBufferDeviceMemory;

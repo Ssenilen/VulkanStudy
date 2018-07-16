@@ -39,6 +39,7 @@ public:
 	void VmInitialize(HINSTANCE hInstance, HWND hWnd, TCHAR* pWindowTitle, const int nWindowWidth, const int nWindowHeight);
 	void DestroyVulkan();
 	void Tick();
+	void Render();
 
 private:
 	/* Amount of time, in nanoseconds, to wait for a command buffer to complete */
@@ -92,13 +93,12 @@ private:
 	void InitFrameBuffer(bool include_depth);
 	void InitVertexBuffer(bool use_texture);
 	void InitIndexBuffer();
+	void InitInstanceBuffer();
 	void InitPipeline(bool include_depth, bool include_vi = true);
 	
 	// Render ฐüทร
 	void SetViewports();
 	void SetScissors();
-
-	void UpdateDataBuffer(int cubeNumX, int cubeNumY);
 	void Present();
 
 	HWND m_hWnd;
@@ -150,8 +150,14 @@ private:
 		VkDescriptorBufferInfo buffer_info;
 	} index_buffer;
 
-	VkVertexInputBindingDescription m_VIBinding;
-	VkVertexInputAttributeDescription m_VIAttribs[4];
+	struct {
+		VkBuffer buf;
+		VkDeviceMemory mem;
+		VkDescriptorBufferInfo buffer_info;
+	} instance_buffer;
+
+	VkVertexInputBindingDescription m_VIBinding[2];
+	VkVertexInputAttributeDescription m_VIAttribs[8];
 	uint32_t m_nCurrent_Buffer;
 
 	VkPipeline m_vkPipeline;

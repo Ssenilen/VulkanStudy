@@ -158,5 +158,11 @@
     <None Include="SpirV\staticmesh.vert">
       <Filter>소스 파일\SpirV</Filter>
     </None>
+    <None Include="SpirV\instancemesh.frag">
+      <Filter>소스 파일\SpirV</Filter>
+    </None>
+    <None Include="SpirV\instancemesh.vert">
+      <Filter>소스 파일\SpirV</Filter>
+    </None>
   </ItemGroup>
 </Project>

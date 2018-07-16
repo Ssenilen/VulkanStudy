@@ -68,8 +68,8 @@ void VmFramework::VmInitialize(HINSTANCE hInstance, HWND hWnd, TCHAR* pWindowTit
 	///
 
 	/// 새롭게 모델 생성하는 부분
-	for(int i = -10 ; i < 11; ++i)
-		for (int j = -11; j < 11; ++j)
+	for(int i = 0; i < 1; ++i)
+		for (int j = 0; j < 1; ++j)
 		{
 			VmGameObject* pGameObject = new VmGameObject(&m_vkDeviceManager, m_pFbxModel, &m_Texture);
 			pGameObject->SetPosition(i * 25.0f, j * 25.0f, 0.0f);
@@ -86,6 +86,7 @@ void VmFramework::VmInitialize(HINSTANCE hInstance, HWND hWnd, TCHAR* pWindowTit
 	// 파이프라인 준비
 	InitVertexBuffer(USING_TEXTURE);
 	InitIndexBuffer();
+	InitInstanceBuffer();
 	SetupDescriptorSetLayout(USING_TEXTURE);
 	InitPipeline(depthPresent);
 	InitDescriptorPool(USING_TEXTURE);
@@ -1142,7 +1143,7 @@ void VmFramework::InitShaders()
 	m_ShaderStages[0].pName = "main";
 
 	size_t size = 0;
-	void* vertShaderCode = read_spv("SpirV/staticmesh_vert.spv", &size);
+	void* vertShaderCode = read_spv("SpirV/instancemesh_vert.spv", &size);
 
 	moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	moduleCreateInfo.pNext = nullptr;
@@ -1162,7 +1163,7 @@ void VmFramework::InitShaders()
 	m_ShaderStages[1].pName = "main";
 
 	size = 0;
-	void* fragShaderCode = read_spv("SpirV/staticmesh_frag.spv", &size);
+	void* fragShaderCode = read_spv("SpirV/instancemesh_frag.spv", &size);
 
 	moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	moduleCreateInfo.pNext = nullptr;
@@ -1252,28 +1253,28 @@ void VmFramework::InitVertexBuffer(bool use_texture)
 	assert(result == VK_SUCCESS);
 
 	// 여기서는 필요하지 않지만, 파이프라인을 만들 때에 필요한 정보들.
-	m_VIBinding.binding = 0;
-	m_VIBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	m_VIBinding.stride = sizeof(float) * 16;
+	m_VIBinding[0].binding = VERTEX_BUFFER_BIND_ID;
+	m_VIBinding[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	m_VIBinding[0].stride = sizeof(float) * 16;
 	// 여기서 stride는 한 개의 정점 크기를 의미한다.
 
 	// Vertex
-	m_VIAttribs[0].binding = 0;
+	m_VIAttribs[0].binding = VERTEX_BUFFER_BIND_ID;
 	m_VIAttribs[0].location = 0;
 	m_VIAttribs[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 	m_VIAttribs[0].offset = 0;
 	// TextureUV or Color
-	m_VIAttribs[1].binding = 0;
+	m_VIAttribs[1].binding = VERTEX_BUFFER_BIND_ID;
 	m_VIAttribs[1].location = 1;
 	m_VIAttribs[1].format = use_texture ? VK_FORMAT_R32G32_SFLOAT : VK_FORMAT_R32G32B32A32_SFLOAT;
 	m_VIAttribs[1].offset = m_VIAttribs[0].offset + 16;
 	// BoneIndices
-	m_VIAttribs[2].binding = 0;
+	m_VIAttribs[2].binding = VERTEX_BUFFER_BIND_ID;
 	m_VIAttribs[2].location = 2;
 	m_VIAttribs[2].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	m_VIAttribs[2].offset = m_VIAttribs[1].offset + 8;
+	m_VIAttribs[2].offset = m_VIAttribs[1].offset + 16;
 	// BoneWeights
-	m_VIAttribs[3].binding = 0;
+	m_VIAttribs[3].binding = VERTEX_BUFFER_BIND_ID;
 	m_VIAttribs[3].location = 3;
 	m_VIAttribs[3].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 	m_VIAttribs[3].offset = m_VIAttribs[2].offset + 16;
@@ -1329,6 +1330,70 @@ void VmFramework::InitIndexBuffer()
 	assert(result == VK_SUCCESS);
 }
 
+void VmFramework::InitInstanceBuffer()
+{
+	VkResult result;
+
+	VkBufferCreateInfo buf_info = {};
+	buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	buf_info.pNext = nullptr;
+	buf_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+	buf_info.size = m_pGameObject.size() * sizeof(Matrix4);
+	buf_info.queueFamilyIndexCount = 0;
+	buf_info.pQueueFamilyIndices = nullptr;
+	result = vkCreateBuffer(m_vkDeviceManager.vkDevice, &buf_info, nullptr, &instance_buffer.buf);
+	assert(result == VK_SUCCESS);
+
+	VkMemoryRequirements mem_reqs;
+	vkGetBufferMemoryRequirements(m_vkDeviceManager.vkDevice, instance_buffer.buf, &mem_reqs);
+
+	VkMemoryAllocateInfo alloc_info = {};
+	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	alloc_info.pNext = nullptr;
+	alloc_info.memoryTypeIndex = 0;
+
+	alloc_info.allocationSize = mem_reqs.size;
+
+	bool pass = memory_type_from_properties(mem_reqs.memoryTypeBits,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		&alloc_info.memoryTypeIndex);
+	assert(pass && "No mappable, coherent memory"); 
+
+	result = vkAllocateMemory(m_vkDeviceManager.vkDevice, &alloc_info, nullptr, &instance_buffer.mem);
+	assert(result == VK_SUCCESS);
+
+	instance_buffer.buffer_info.range = mem_reqs.size;
+	instance_buffer.buffer_info.offset = 0;
+
+	result = vkBindBufferMemory(m_vkDeviceManager.vkDevice, instance_buffer.buf, instance_buffer.mem, 0);
+	assert(result == VK_SUCCESS);
+
+	// 여기선 생성과 바인딩만 한다. 맵핑은 렌더 직전에 각 객체들에 대해 해준다.
+	m_VIBinding[1].binding = INSTANCE_BUFFER_BIND_ID;
+	m_VIBinding[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+	m_VIBinding[1].stride = sizeof(Matrix4);
+	// Instancing - InstanceMatrix[0]
+	m_VIAttribs[4].binding = INSTANCE_BUFFER_BIND_ID;
+	m_VIAttribs[4].location = 4;
+	m_VIAttribs[4].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	m_VIAttribs[4].offset = m_VIAttribs[3].offset + 16;
+	// Instancing - InstanceMatrix[1]
+	m_VIAttribs[5].binding = INSTANCE_BUFFER_BIND_ID;
+	m_VIAttribs[5].location = 5;
+	m_VIAttribs[5].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	m_VIAttribs[5].offset = m_VIAttribs[4].offset + 16;
+	// Instancing - InstanceMatrix[2]
+	m_VIAttribs[6].binding = INSTANCE_BUFFER_BIND_ID;
+	m_VIAttribs[6].location = 6;
+	m_VIAttribs[6].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	m_VIAttribs[6].offset = m_VIAttribs[5].offset + 16;
+	// Instancing - InstanceMatrix[3]
+	m_VIAttribs[7].binding = INSTANCE_BUFFER_BIND_ID;
+	m_VIAttribs[7].location = 7;
+	m_VIAttribs[7].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	m_VIAttribs[7].offset = m_VIAttribs[6].offset + 16;
+}
+
 void VmFramework::InitPipeline(bool include_depth, bool include_vi)
 {
 	VkResult result;
@@ -1359,9 +1424,9 @@ void VmFramework::InitPipeline(bool include_depth, bool include_vi)
 	if (include_vi) {
 		vi.pNext = NULL;
 		vi.flags = 0;
-		vi.vertexBindingDescriptionCount = 1;
-		vi.pVertexBindingDescriptions = &m_VIBinding;
-		vi.vertexAttributeDescriptionCount = 4;
+		vi.vertexBindingDescriptionCount = 2;
+		vi.pVertexBindingDescriptions = m_VIBinding;
+		vi.vertexAttributeDescriptionCount = 8;
 		vi.pVertexAttributeDescriptions = m_VIAttribs;
 	}
 
@@ -1498,69 +1563,6 @@ void VmFramework::SetScissors()
 	vkCmdSetScissor(m_vkCommandBuffer, 0, NUM_SCISSORS, &m_vkScissor);
 }
 
-void VmFramework::UpdateDataBuffer(int cubeNumX = 0, int cubeNumY = 0)
-{
-	VkResult result;
-	uint8_t *pData;
-
-	/// ---임시임시임시임시--- 나중에 카메라기능 따로 뺍시다 ---임시임시임시임시---
-	/// ---임시임시임시임시--- 나중에 카메라기능 따로 뺍시다 ---임시임시임시임시---
-	/// ---임시임시임시임시--- 나중에 카메라기능 따로 뺍시다 ---임시임시임시임시---
-	glm::mat4 mtxView = glm::lookAt(glm::vec3(m_fCameraPosX, m_fCameraPosY, m_fCameraPosZ),
-		glm::vec3(0.0f, 0.0f, 0.0f),
-		glm::vec3(0.0f, 1.0f, 0.0f));
-
-	float fov = glm::radians(45.0f);
-	glm::mat4 mtxProjection = glm::perspective(fov, static_cast<float>(m_nWindowWidth) / static_cast<float>(m_nWindowHeight), 0.1f, 100.0f);
-
-	glm::mat4 m_mtxModel = glm::mat4(1.0f);
-	m_mtxModel[3][0] = 25.0f * cubeNumX;
-	m_mtxModel[3][1] = 25.0f * cubeNumY;
-
-	// Vulkan clip space has inverted Y and half Z.
-	glm::mat4 mtxClip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, -1.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 0.5f, 0.5f,
-		0.0f, 0.0f, 0.0f, 1.0f);
-
-	m_mtxVP = mtxClip * mtxProjection * mtxView;
-	glm::mat4 mtxMVP = m_mtxVP * m_mtxModel;
-	/// ---임시임시임시임시--- 나중에 카메라기능 따로 뺍시다 ---임시임시임시임시---
-	/// ---임시임시임시임시--- 나중에 카메라기능 따로 뺍시다 ---임시임시임시임시---
-	/// ---임시임시임시임시--- 나중에 카메라기능 따로 뺍시다 ---임시임시임시임시---
-
-	//glm::mat4 mtxModel = m_mtxModel;
-
-	//m_mtxModel = glm::rotate(m_mtxModel, m_fRotateAngle, glm::vec3(0.0f, 1.0f, 0.0f));
-	//glm::mat4 mtxMVP = m_mtxVP * m_mtxModel;
-
-	VkMemoryRequirements mem_reqs;
-	
-	//vkWaitForFences(m_vkDeviceManager.vkDevice, 1, &m_vkDrawFence, VK_TRUE, UINT64_MAX);
-	//vkWaitForFences(m_vkDeviceManager.vkDevice, 1, &m_vkDrawFence[m_nCurrent_Buffer], VK_TRUE, UINT64_MAX);
-	
-	vkGetBufferMemoryRequirements(m_vkDeviceManager.vkDevice, m_UniformData.buf, &mem_reqs);
-	result = vkMapMemory(m_vkDeviceManager.vkDevice, m_UniformData.mem, 0, VK_WHOLE_SIZE, 0, (void**)&pData);
-	assert(result == VK_SUCCESS);
-
-	memcpy(pData, &mtxMVP, sizeof(mtxMVP));
-
-	vkUnmapMemory(m_vkDeviceManager.vkDevice, m_UniformData.mem);
-
-	//result = vkBindBufferMemory(m_vkDeviceManager.vkDevice, m_UniformData.buf, m_UniformData.mem, 0);
-	assert(result == VK_SUCCESS);
-	
-	// 왜일까?
-	//vkCmdUpdateBuffer(m_vkCommandBuffer, m_UniformData.buf, 0, mem_reqs.size, pData);
-
-	// m_BoneUniform
-	vkGetBufferMemoryRequirements(m_vkDeviceManager.vkDevice, m_BoneUniformData.buf, &mem_reqs);
-	result = vkMapMemory(m_vkDeviceManager.vkDevice, m_BoneUniformData.mem, 0, VK_WHOLE_SIZE, 0, (void**)&pData);
-	assert(result == VK_SUCCESS);
-	m_pFbxModel->GetBoneUniformData(pData);
-	vkUnmapMemory(m_vkDeviceManager.vkDevice, m_BoneUniformData.mem);
-}
-
 void VmFramework::Present()
 {
 	VkResult result;
@@ -1627,6 +1629,14 @@ void VmFramework::Tick()
 {
 	g_GameTimer.Tick();
 
+	for (auto objIter = m_pGameObject.begin(); objIter != m_pGameObject.end(); ++objIter)
+	{
+		(*objIter)->Tick(g_GameTimer.GetDeltaTime());
+	}
+}
+
+void VmFramework::Render()
+{
 	VkResult result;
 
 	VkClearValue clear_values[2];
@@ -1673,30 +1683,41 @@ void VmFramework::Tick()
 		0.0f, 0.0f, 0.5f, 0.5f,
 		0.0f, 0.0f, 0.0f, 1.0f);
 
-	for (int i = 0; i < m_pGameObject.size(); ++i)
-	{
-		{ // Pre Draw Setting
-			vkCmdBindDescriptorSets(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline_Layout, 0, 1, m_pGameObject[i]->GetDescriptorSet(), 0, nullptr);
-			vkCmdBindVertexBuffers(m_vkCommandBuffer, 0, 1, &vertex_buffer.buf, offsets);
-			vkCmdBindIndexBuffer(m_vkCommandBuffer, index_buffer.buf, 0, VK_INDEX_TYPE_UINT16);
-			vkCmdBindPipeline(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline);
-		}
-		//m_pGameObject[i]->SetDescriptorSet();
-		m_pGameObject[i]->UpdateUniformBuffer(&m_MatrixManager);
-		vkCmdDrawIndexed(m_vkCommandBuffer, m_pFbxModel->GetIndices(), 1, 0, 0, 0);
-	}
-
-	//for (int i = 0; i < 1; i++)
+	//for (int i = 0; i < m_pGameObject.size(); ++i)
 	//{
-	//	for (int j = 0; j < 1; j++)
-	//	{
-	//		UpdateDataBuffer(i, j);
-
-	//		vkCmdDraw(m_vkCommandBuffer, 12 * 3, 1, 0, 0);
-	//		vkCmdDrawIndexed(m_vkCommandBuffer, m_pFbxModel->GetIndices(), 1, 0, 0, 0);
+	//	{ // Pre Draw Setting
+	//		vkCmdBindDescriptorSets(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline_Layout, 0, 1, m_pGameObject[i]->GetDescriptorSet(), 0, nullptr);
+	//		vkCmdBindVertexBuffers(m_vkCommandBuffer, 0, 1, &vertex_buffer.buf, offsets);
+	//		vkCmdBindIndexBuffer(m_vkCommandBuffer, index_buffer.buf, 0, VK_INDEX_TYPE_UINT16);
+	//		vkCmdBindPipeline(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline);
 	//	}
+	//	//m_pGameObject[i]->SetDescriptorSet();
+	//	m_pGameObject[i]->UpdateUniformBuffer(&m_MatrixManager);
+	//	vkCmdDrawIndexed(m_vkCommandBuffer, m_pFbxModel->GetIndices(), 1, 0, 0, 0);
 	//}
 
+	// 얘를 임시로 인스턴스 씬용 카메라 uniform으로 쓰자.
+	m_pGameObject[0]->UpdateUniformBuffer(&m_MatrixManager);
+	
+	// Instance Buffer Mapping
+	uint8_t* pData;
+	result = vkMapMemory(m_vkDeviceManager.vkDevice, instance_buffer.mem, 0, VK_WHOLE_SIZE, 0, (void**)&pData);
+	assert(result == VK_SUCCESS);
+	for (int i = 0; i < m_pGameObject.size(); ++i)
+	{
+		memcpy(&pData[i], &m_pGameObject.at(i)->GetModelMatrix(), sizeof(Matrix4));
+	}
+	vkUnmapMemory(m_vkDeviceManager.vkDevice, instance_buffer.mem);
+	
+
+	vkCmdBindDescriptorSets(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline_Layout, 0, 1, m_pGameObject[0]->GetDescriptorSet(), 0, nullptr);
+	vkCmdBindPipeline(m_vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_vkPipeline);
+	
+	vkCmdBindVertexBuffers(m_vkCommandBuffer, VERTEX_BUFFER_BIND_ID, 1, &vertex_buffer.buf, offsets);
+	vkCmdBindVertexBuffers(m_vkCommandBuffer, INSTANCE_BUFFER_BIND_ID, 1, &instance_buffer.buf, offsets);
+	vkCmdBindIndexBuffer(m_vkCommandBuffer, index_buffer.buf, 0, VK_INDEX_TYPE_UINT16); 
+	
+	vkCmdDrawIndexed(m_vkCommandBuffer, m_pFbxModel->GetIndices(), 1, 0, 0, 0);
 	vkCmdEndRenderPass(m_vkCommandBuffer);
 
 	result = vkEndCommandBuffer(m_vkCommandBuffer);

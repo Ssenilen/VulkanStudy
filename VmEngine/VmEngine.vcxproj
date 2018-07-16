@@ -200,6 +200,12 @@
     <Image Include="VmEngine.ico" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="SpirV\instancemesh.frag">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="SpirV\instancemesh.vert">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </None>
     <None Include="SpirV\skeletalmesh.frag">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </None>

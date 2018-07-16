@@ -13,6 +13,21 @@ VmGameObject::VmGameObject(VkDeviceManager* pvkDeviceManager, FBXModel* pMesh, t
 	m_pUniformBuffer = new VmBuffer(m_pDeviceManager->vkDevice, m_pDeviceManager->vkPhysicalDeviceMemoryProperties);
 	CreateUniformBuffer();
 	m_mtxModel = Matrix4(1.0f);
+	m_mtxRotate = Matrix4(1.0f);
+	m_mtxTranslate = Matrix4(1.0f);
+
+	//m_vRotateAxis = Vector3(rand(), rand(), rand());
+	switch (rand() % 6)
+	{
+	case 0: m_vRotateAxis = Vector3(0.0f, 0.0f, 1.0f); break;
+	case 1: m_vRotateAxis = Vector3(1.0f, 0.0f, 0.0f); break;
+	case 2: m_vRotateAxis = Vector3(0.0f, 1.0f, 0.0f); break;
+	case 3: m_vRotateAxis = Vector3(0.0f, -1.0f, 0.0f); break;
+	case 4: m_vRotateAxis = Vector3(-1.0f, 0.0f, 0.0f); break;
+	case 5: m_vRotateAxis = Vector3(0.0f, 0.0f, -1.0f); break;
+	default: break;
+	}
+	m_vRotateAxis = glm::normalize(m_vRotateAxis);
 }
 
 
@@ -24,8 +39,15 @@ void VmGameObject::Initialize()
 {
 }
 
-void VmGameObject::Tick()
+void VmGameObject::Tick(float fDeltaTime)
 {
+	m_fRotateAngle += 1.0f * fDeltaTime;
+	if (m_fRotateAngle > 360.0f)
+		m_fRotateAngle = 0.0f;
+
+	m_mtxRotate = glm::rotate(Matrix4(1.0f), m_fRotateAngle, m_vRotateAxis);
+
+	m_mtxModel = m_mtxTranslate * m_mtxRotate;
 }
 
 void VmGameObject::Render()
@@ -34,9 +56,9 @@ void VmGameObject::Render()
 
 void VmGameObject::SetPosition(float x, float y, float z)
 {
-	m_mtxModel[3][0] = x;
-	m_mtxModel[3][1] = y;
-	m_mtxModel[3][2] = z;
+	m_mtxTranslate[3][0] = x;
+	m_mtxTranslate[3][1] = y;
+	m_mtxTranslate[3][2] = z;
 }
 
 void VmGameObject::CreateUniformBuffer()
@@ -113,13 +135,12 @@ void VmGameObject::UpdateUniformBuffer(MatrixManager* pMatrixManager)
 	VkResult result;
 	if (pMatrixManager)
 	{	
-
 		Matrix4 mtxVp = pMatrixManager->mtxClip * pMatrixManager->mtxProjection * pMatrixManager->mtxView;
-		Matrix4 mtxMVP = mtxVp * m_mtxModel;
+		//Matrix4 mtxMVP = mtxVp * m_mtxModel;
 
 		result = m_pUniformBuffer->Map(sizeof(Matrix4), 0);
 		assert(result == VK_SUCCESS);
-		memcpy(m_pUniformBuffer->GetMappedMemory(), &mtxMVP, sizeof(mtxMVP));
+		memcpy(m_pUniformBuffer->GetMappedMemory(), &mtxVp, sizeof(mtxVp));
 		m_pUniformBuffer->Unmap();
 	}
 }
